@@ -13,6 +13,11 @@ import type { JSONContent } from '@tiptap/core'
 
 export const DOC_SCHEMA = 'freedom-docs/doc/1'
 
+export type DocVersion = {
+  ref: string
+  publishedAt: number
+}
+
 export type DocRecord = {
   id: string
   name: string
@@ -24,6 +29,8 @@ export type DocRecord = {
   // Last published immutable snapshot
   lastPublishedRef?: string
   publishedAt?: number
+  // Every published snapshot, oldest first — each ref is immutable on Swarm
+  versions?: DocVersion[]
 }
 
 export type DocSnapshot = {

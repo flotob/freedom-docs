@@ -36,6 +36,8 @@ export const EditorPage = () => {
     doc?.manifestRef || doc?.lastPublishedRef || null
   )
   const [copied, setCopied] = useState(false)
+  const [versions, setVersions] = useState(doc?.versions || [])
+  const [showHistory, setShowHistory] = useState(false)
 
   // Latest editor content, tracked via onChange and flushed to localStorage.
   const contentRef = useRef<JSONContent | string | null>(
@@ -106,13 +108,18 @@ export const EditorPage = () => {
         manifestRef = snapshotRef
       }
 
-      updateDoc(docId, {
+      const updated = updateDoc(docId, {
         feedId,
         manifestRef,
         lastPublishedRef: snapshotRef,
         publishedAt: Date.now(),
         name: docName,
+        versions: [
+          ...(getDoc(docId)?.versions || []),
+          { ref: snapshotRef, publishedAt: Date.now() },
+        ],
       })
+      setVersions(updated?.versions || [])
       setShareRef(manifestRef || snapshotRef)
       setPublishState('published')
       setTimeout(() => setPublishState('idle'), 2500)
@@ -172,6 +179,43 @@ export const EditorPage = () => {
         )}
       </div>
       <div className="flex items-center gap-3 shrink-0">
+        {versions.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+              className="text-[13px] text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-3 py-1.5"
+            >
+              History ({versions.length})
+            </button>
+            {showHistory && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[240px] max-h-[300px] overflow-auto z-50">
+                {[...versions].reverse().map((version, i) => (
+                  <button
+                    key={version.ref}
+                    onClick={() => {
+                      setShowHistory(false)
+                      navigate(`/d/${version.ref}`)
+                    }}
+                    className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-50 flex justify-between gap-3"
+                  >
+                    <span>
+                      v{versions.length - i}
+                      {i === 0 && (
+                        <span className="text-gray-400"> (latest)</span>
+                      )}
+                    </span>
+                    <span className="text-gray-500">
+                      {new Date(version.publishedAt).toLocaleString(undefined, {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {shareUrl && (
           <button
             onClick={onCopyShare}
