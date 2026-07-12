@@ -16,7 +16,6 @@ import {
   hasWritableStorage,
   publishJson,
   supportsFeeds,
-  swarmUrl,
   updateDocFeed,
 } from '../lib/swarm'
 
@@ -130,7 +129,11 @@ export const EditorPage = () => {
     }
   }
 
-  const shareUrl = shareRef ? swarmUrl(shareRef) : null
+  // Share link points at this app's viewer route, so it works from any
+  // origin the app is served from (bzz://, gateway, dev server).
+  const shareUrl = shareRef
+    ? `${window.location.href.split('#')[0]}#/d/${shareRef}`
+    : null
 
   const onCopyShare = async () => {
     if (!shareUrl) return
