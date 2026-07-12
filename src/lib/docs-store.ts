@@ -19,6 +19,12 @@ export type DocVersion = {
   publishedAt: number
 }
 
+/** A collaborator's writer stream: their feed manifest ref + display label. */
+export type DocWriter = {
+  label: string
+  feedRef: string
+}
+
 export type DocRecord = {
   id: string
   name: string
@@ -35,13 +41,24 @@ export type DocRecord = {
   publishedAt?: number
   // Every published snapshot, oldest first — each ref is immutable on Swarm
   versions?: DocVersion[]
+  // --- shared-doc fields ---
+  // 'owner' (default) or 'collaborator' (joined via an edit link)
+  role?: 'owner' | 'collaborator'
+  // Collaborator only: the owner's feed manifest ref (the doc's identity)
+  sharedFrom?: string
+  // Owner only: accepted collaborator writer streams
+  writers?: DocWriter[]
 }
 
 export type DocSnapshot = {
   schema: typeof DOC_SCHEMA
   name: string
+  // Base64-encoded Yjs full state (what the editor's onChange emits)
   content: JSONContent | string
   publishedAt: number
+  // Owner snapshots only: accepted collaborator writer streams. Readers and
+  // editors fetch each writer's latest snapshot and CRDT-merge the states.
+  writers?: DocWriter[]
 }
 
 const INDEX_KEY = 'freedom-docs:index'

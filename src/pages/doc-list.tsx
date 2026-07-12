@@ -160,7 +160,20 @@ export const DocList = () => {
               onClick={() => navigate(`/edit/${doc.id}`)}
             >
               <div className="flex flex-col gap-1">
-                <span className="font-medium text-[15px]">{doc.name}</span>
+                <span className="font-medium text-[15px] flex items-center gap-2">
+                  {doc.name}
+                  {doc.role === 'collaborator' && (
+                    <span className="text-[11px] font-normal bg-purple-50 text-purple-700 border border-purple-200 rounded px-1.5 py-0.5">
+                      shared with me
+                    </span>
+                  )}
+                  {doc.role !== 'collaborator' && (doc.writers?.length || 0) > 0 && (
+                    <span className="text-[11px] font-normal bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+                      {doc.writers!.length} collaborator
+                      {doc.writers!.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </span>
                 <span className="text-[13px] text-gray-500">
                   Edited {formatDate(doc.updatedAt)}
                   {doc.publishedAt && (

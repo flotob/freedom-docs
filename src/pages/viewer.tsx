@@ -4,6 +4,7 @@ import { DdocEditor } from '@fileverse-dev/ddoc'
 import { DOC_SCHEMA, DocSnapshot } from '../lib/docs-store'
 import { getSwarmJson } from '../lib/swarm'
 import { decryptJson, isEncryptedEnvelope } from '../lib/crypto'
+import { fetchRemoteDocState } from '../lib/shared-doc'
 
 export const ViewerPage = () => {
   const { reference, docKey } = useParams()
@@ -11,7 +12,7 @@ export const ViewerPage = () => {
   const [snapshot, setSnapshot] = useState<DocSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [zoomLevel, setZoomLevel] = useState('1')
-  const [isNavbarVisible, setIsNavbarVisible] = useState(false)
+  const [isNavbarVisible, setIsNavbarVisible] = useState(true)
 
   useEffect(() => {
     if (!reference) return
@@ -44,7 +45,21 @@ export const ViewerPage = () => {
         setError('This Swarm reference is not a Freedom Docs document.')
         return
       }
-      setSnapshot(payload as DocSnapshot)
+
+      const snapshot = payload as DocSnapshot
+      // Shared doc: merge every collaborator's stream into the view
+      if (snapshot.writers?.length && docKey) {
+        try {
+          const remote = await fetchRemoteDocState(reference, docKey)
+          if (cancelled) return
+          if (remote.states.length > 0) {
+            snapshot.content = remote.states as unknown as string
+          }
+        } catch (err) {
+          console.warn('Failed to merge collaborator streams:', err)
+        }
+      }
+      setSnapshot(snapshot)
     }
 
     load().catch((err) => {
