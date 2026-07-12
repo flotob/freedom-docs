@@ -153,7 +153,12 @@ export const EditorPage = () => {
       const remote = await fetchRemoteDocState(identityRef, key)
       if (collaborator && remote.name) {
         setDocName(remote.name)
-        updateDoc(docId, { name: remote.name, kind: remote.kind })
+        // Adopt the owner's shared sheetId so our dsheet keys match theirs.
+        updateDoc(docId, {
+          name: remote.name,
+          kind: remote.kind,
+          ...(remote.sheetId ? { sheetId: remote.sheetId } : {}),
+        })
       }
       // Owner: the local writers list is authoritative (the descriptor is
       // published from it) — never overwrite it from a feed read, which may
@@ -272,6 +277,7 @@ export const EditorPage = () => {
       schema: DOC_SCHEMA,
       name: docName,
       kind: doc?.kind || 'doc',
+      ...(doc?.sheetId ? { sheetId: doc.sheetId } : {}),
       content: contentRef.current ?? '',
       publishedAt: Date.now(),
       // Only the owner's descriptor lists writers
@@ -665,7 +671,7 @@ export const EditorPage = () => {
         >
           <DSheetEditor
             key={editorInput.key}
-            dsheetId={docId!}
+            dsheetId={doc?.sheetId || docId!}
             isNewSheet={sheetPortalContent === ''}
             isAuthorized={true}
             portalContent={sheetPortalContent || undefined}

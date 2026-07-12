@@ -32,6 +32,10 @@ export type DocRecord = {
   name: string
   // 'doc' (rich text, default) or 'sheet' (spreadsheet)
   kind?: DocKind
+  // Stable, shared spreadsheet id used as dsheet's internal array key. All
+  // collaborators MUST use the same value or their edits key into an empty
+  // array. Shared via the snapshot; owner generates it at creation.
+  sheetId?: string
   createdAt: number
   updatedAt: number
   // Per-doc AES-256-GCM key (base64url). Docs created before E2EE lack it
@@ -59,6 +63,8 @@ export type DocSnapshot = {
   name: string
   // 'doc' when absent (pre-sheets snapshots)
   kind?: DocKind
+  // Shared dsheet key (sheets only) — collaborators must reuse it verbatim
+  sheetId?: string
   // Base64-encoded Yjs full state (what the editor's onChange emits)
   content: JSONContent | string
   publishedAt: number
@@ -92,6 +98,7 @@ export const createDoc = (name = 'Untitled', kind: DocKind = 'doc'): DocRecord =
     id: nanoid(12),
     name,
     kind,
+    ...(kind === 'sheet' ? { sheetId: nanoid(12) } : {}),
     createdAt: Date.now(),
     updatedAt: Date.now(),
     keyB64: generateDocKey(),

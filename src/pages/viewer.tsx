@@ -134,7 +134,7 @@ export const ViewerPage = () => {
           }
         >
           <DSheetEditor
-            dsheetId={`viewer-${reference}`}
+            dsheetId={snapshot.sheetId || `viewer-${reference}`}
             isNewSheet={false}
             isAuthorized={false}
             isReadOnly={true}
