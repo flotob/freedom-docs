@@ -124,9 +124,6 @@ export const EditorPage = () => {
     []
   )
   const onSheetSyncStatus = useCallback((status: string) => {
-    // Diagnostic: a regression back to 'syncing'/'initializing' after 'synced'
-    // is what leaves the grid stuck in its skeleton.
-    console.log('[freedom-docs] sheet sync status →', status)
     setSheetStatus(status)
   }, [])
 
@@ -262,16 +259,6 @@ export const EditorPage = () => {
     }
 
     if (contentRef.current) saveContent(docId, contentRef.current)
-
-    console.log('[freedom-docs] publish', {
-      kind: doc?.kind || 'doc',
-      role: doc?.role || 'owner',
-      contentType: Array.isArray(contentRef.current)
-        ? 'array'
-        : typeof contentRef.current,
-      contentLen:
-        typeof contentRef.current === 'string' ? contentRef.current.length : 0,
-    })
 
     const snapshot: DocSnapshot = {
       schema: DOC_SCHEMA,
