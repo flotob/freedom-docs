@@ -1,4 +1,12 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
 import type { JSONContent } from '@tiptap/core'
@@ -85,11 +93,42 @@ export const EditorPage = () => {
   const contentRef = useRef<JSONContent | string | null>(
     docId ? loadContent(docId) : null
   )
+  // Stable indirection to the change handler (defined below) so the sheet's
+  // onChange prop can be identity-stable.
+  const onChangeRef = useRef<(c: string | JSONContent) => void>(() => {})
   const [editorInput, setEditorInput] = useState<{
     key: number
     content: string | string[] | JSONContent
   } | null>(isShared ? null : { key: 0, content: contentRef.current ?? '' })
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [sheetStatus, setSheetStatus] = useState<string>('')
+
+  // Merged Yjs state for the sheet editor, computed once per sync (not every
+  // render) so publish-triggered re-renders never churn the prop.
+  const sheetPortalContent = useMemo(() => {
+    if (!editorInput) return ''
+    const states = Array.isArray(editorInput.content)
+      ? editorInput.content
+      : typeof editorInput.content === 'string' && editorInput.content
+        ? [editorInput.content]
+        : []
+    return states.length > 0 ? mergeYjsStates(states as string[]) : ''
+  }, [editorInput])
+
+  // Stable handlers so the sheet editor's props don't change identity on
+  // every parent re-render (publish state, doc refresh, etc.).
+  const onSheetChange = useCallback(
+    (_data: unknown, encodedUpdate?: string) => {
+      if (encodedUpdate) onChangeRef.current(encodedUpdate)
+    },
+    []
+  )
+  const onSheetSyncStatus = useCallback((status: string) => {
+    // Diagnostic: a regression back to 'syncing'/'initializing' after 'synced'
+    // is what leaves the grid stuck in its skeleton.
+    console.log('[freedom-docs] sheet sync status →', status)
+    setSheetStatus(status)
+  }, [])
 
   /**
    * Fetch all writer states and (re)mount the editor with merged content.
@@ -195,6 +234,7 @@ export const EditorPage = () => {
     },
     [docId]
   )
+  onChangeRef.current = onChange
 
   const onRename = (name: string) => {
     setDocName(name)
@@ -217,6 +257,16 @@ export const EditorPage = () => {
     }
 
     if (contentRef.current) saveContent(docId, contentRef.current)
+
+    console.log('[freedom-docs] publish', {
+      kind: doc?.kind || 'doc',
+      role: doc?.role || 'owner',
+      contentType: Array.isArray(contentRef.current)
+        ? 'array'
+        : typeof contentRef.current,
+      contentLen:
+        typeof contentRef.current === 'string' ? contentRef.current.length : 0,
+    })
 
     const snapshot: DocSnapshot = {
       schema: DOC_SCHEMA,
@@ -367,6 +417,19 @@ export const EditorPage = () => {
           className="font-medium text-[15px] bg-transparent focus:outline-none focus:ring-1 focus:ring-gray-300 rounded px-2 py-1 min-w-0 disabled:text-gray-500"
           title={isCollaborator ? 'Only the owner can rename a shared doc' : undefined}
         />
+        {isSheet && sheetStatus && sheetStatus !== 'synced' && (
+          <button
+            onClick={() =>
+              setEditorInput((prev) =>
+                prev ? { ...prev, key: prev.key + 1 } : prev
+              )
+            }
+            className="text-[12px] text-amber-700 border border-amber-300 rounded-lg px-2 py-1 shrink-0"
+            title={`Sheet status: ${sheetStatus}`}
+          >
+            ↻ Reload sheet
+          </button>
+        )}
         {isShared && (
           <button
             onClick={syncFromSwarm}
@@ -589,14 +652,8 @@ export const EditorPage = () => {
   }
 
   if (isSheet) {
-    // The sheet editor takes a single merged Yjs state (portalContent) and
-    // emits the full state as onChange's second argument.
-    const states = Array.isArray(editorInput.content)
-      ? editorInput.content
-      : typeof editorInput.content === 'string' && editorInput.content
-        ? [editorInput.content]
-        : []
-    const portalContent = states.length > 0 ? mergeYjsStates(states) : ''
+    // The sheet editor takes a single merged Yjs state (portalContent,
+    // memoized above) and emits the full state as onChange's 2nd argument.
     return (
       <main className="min-h-full">
         <Suspense
@@ -609,12 +666,11 @@ export const EditorPage = () => {
           <DSheetEditor
             key={editorInput.key}
             dsheetId={docId!}
-            isNewSheet={portalContent === ''}
+            isNewSheet={sheetPortalContent === ''}
             isAuthorized={true}
-            portalContent={portalContent || undefined}
-            onChange={(_updateData, encodedUpdate) => {
-              if (encodedUpdate) onChange(encodedUpdate)
-            }}
+            portalContent={sheetPortalContent || undefined}
+            onChange={onSheetChange}
+            onContentSyncStatusChange={onSheetSyncStatus}
             renderNavbar={renderNavbar}
           />
         </Suspense>
