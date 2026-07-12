@@ -10,6 +10,7 @@ const App = () => {
       <Route path="/" element={<DocList />} />
       <Route path="/edit/:docId" element={<EditorPage />} />
       <Route path="/d/:reference" element={<ViewerPage />} />
+      <Route path="/d/:reference/:docKey" element={<ViewerPage />} />
     </Routes>
   )
 }

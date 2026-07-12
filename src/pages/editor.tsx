@@ -18,6 +18,7 @@ import {
   supportsFeeds,
   updateDocFeed,
 } from '../lib/swarm'
+import { encryptJson, generateDocKey } from '../lib/crypto'
 
 type PublishState = 'idle' | 'publishing' | 'published' | 'error'
 
@@ -37,6 +38,7 @@ export const EditorPage = () => {
   const [copied, setCopied] = useState(false)
   const [versions, setVersions] = useState(doc?.versions || [])
   const [showHistory, setShowHistory] = useState(false)
+  const [docKey, setDocKey] = useState<string | null>(doc?.keyB64 || null)
 
   // Latest editor content, tracked via onChange and flushed to localStorage.
   const contentRef = useRef<JSONContent | string | null>(
@@ -84,13 +86,22 @@ export const EditorPage = () => {
 
       if (contentRef.current) saveContent(docId, contentRef.current)
 
+      // Docs created before E2EE get their key on first publish
+      let key = docKey
+      if (!key) {
+        key = generateDocKey()
+        setDocKey(key)
+      }
+
       const snapshot: DocSnapshot = {
         schema: DOC_SCHEMA,
         name: docName,
         content: contentRef.current ?? '',
         publishedAt: Date.now(),
       }
-      const snapshotRef = await publishJson(snapshot, `${docName}.json`)
+      // Encrypted envelope; generic publish name so the title never leaks
+      const envelope = await encryptJson(key, snapshot)
+      const snapshotRef = await publishJson(envelope, 'freedom-docs.json')
 
       let manifestRef = doc.manifestRef
       let feedId = doc.feedId
@@ -113,6 +124,7 @@ export const EditorPage = () => {
         lastPublishedRef: snapshotRef,
         publishedAt: Date.now(),
         name: docName,
+        keyB64: key,
         versions: [
           ...(getDoc(docId)?.versions || []),
           { ref: snapshotRef, publishedAt: Date.now() },
@@ -130,10 +142,13 @@ export const EditorPage = () => {
   }
 
   // Share link points at this app's viewer route, so it works from any
-  // origin the app is served from (bzz://, gateway, dev server).
-  const shareUrl = shareRef
-    ? `${window.location.href.split('#')[0]}#/d/${shareRef}`
-    : null
+  // origin the app is served from (bzz://, gateway, dev server). The doc
+  // key rides along as a path segment under the hash router — URL fragments
+  // never reach gateways or servers, so only link holders can decrypt.
+  const shareUrl =
+    shareRef && docKey
+      ? `${window.location.href.split('#')[0]}#/d/${shareRef}/${docKey}`
+      : null
 
   const onCopyShare = async () => {
     if (!shareUrl) return
@@ -197,7 +212,11 @@ export const EditorPage = () => {
                     key={version.ref}
                     onClick={() => {
                       setShowHistory(false)
-                      navigate(`/d/${version.ref}`)
+                      navigate(
+                        docKey
+                          ? `/d/${version.ref}/${docKey}`
+                          : `/d/${version.ref}`
+                      )
                     }}
                     className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-50 flex justify-between gap-3"
                   >

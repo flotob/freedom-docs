@@ -10,6 +10,7 @@
 
 import { nanoid } from 'nanoid'
 import type { JSONContent } from '@tiptap/core'
+import { generateDocKey } from './crypto'
 
 export const DOC_SCHEMA = 'freedom-docs/doc/1'
 
@@ -23,6 +24,9 @@ export type DocRecord = {
   name: string
   createdAt: number
   updatedAt: number
+  // Per-doc AES-256-GCM key (base64url). Docs created before E2EE lack it
+  // until their next publish.
+  keyB64?: string
   // Set once the doc has a Swarm feed (Freedom Browser)
   feedId?: string
   manifestRef?: string
@@ -66,6 +70,7 @@ export const createDoc = (name = 'Untitled'): DocRecord => {
     name,
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    keyB64: generateDocKey(),
   }
   saveIndex([doc, ...listDocs()])
   return doc
@@ -99,4 +104,41 @@ export const loadContent = (id: string): JSONContent | string | null => {
 
 export const saveContent = (id: string, content: JSONContent | string) => {
   localStorage.setItem(contentKey(id), JSON.stringify(content))
+}
+
+// --- Backup export/import (walk-away for the local doc list + keys) ---
+
+export const BACKUP_SCHEMA = 'freedom-docs/backup/1'
+
+export type DocsBackup = {
+  schema: typeof BACKUP_SCHEMA
+  exportedAt: number
+  docs: Array<DocRecord & { content: JSONContent | string | null }>
+}
+
+export const exportBackup = (): DocsBackup => ({
+  schema: BACKUP_SCHEMA,
+  exportedAt: Date.now(),
+  docs: listDocs().map((doc) => ({ ...doc, content: loadContent(doc.id) })),
+})
+
+/** Merge a backup into this device; existing docs win on newer updatedAt. */
+export const importBackup = (backup: DocsBackup): number => {
+  if (backup?.schema !== BACKUP_SCHEMA || !Array.isArray(backup.docs)) {
+    throw new Error('Not a Freedom Docs backup file')
+  }
+  const existing = new Map(listDocs().map((doc) => [doc.id, doc]))
+  let imported = 0
+  for (const entry of backup.docs) {
+    const { content, ...record } = entry
+    const current = existing.get(record.id)
+    if (current && current.updatedAt >= record.updatedAt) continue
+    existing.set(record.id, record)
+    if (content !== null && content !== undefined) {
+      saveContent(record.id, content)
+    }
+    imported++
+  }
+  localStorage.setItem(INDEX_KEY, JSON.stringify([...existing.values()]))
+  return imported
 }

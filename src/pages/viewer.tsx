@@ -3,9 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
 import { DOC_SCHEMA, DocSnapshot } from '../lib/docs-store'
 import { getSwarmJson } from '../lib/swarm'
+import { decryptJson, isEncryptedEnvelope } from '../lib/crypto'
 
 export const ViewerPage = () => {
-  const { reference } = useParams()
+  const { reference, docKey } = useParams()
   const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState<DocSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -18,23 +19,42 @@ export const ViewerPage = () => {
     setSnapshot(null)
     setError(null)
 
-    getSwarmJson(reference)
-      .then((data) => {
-        if (cancelled) return
-        if (data?.schema !== DOC_SCHEMA) {
-          setError('This Swarm reference is not a Freedom Docs document.')
+    const load = async () => {
+      const data = await getSwarmJson(reference)
+      if (cancelled) return
+
+      let payload: any = data
+      if (isEncryptedEnvelope(data)) {
+        if (!docKey) {
+          setError(
+            'This document is encrypted — you need the full share link (it includes the decryption key).'
+          )
           return
         }
-        setSnapshot(data as DocSnapshot)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err?.message || 'Failed to load document')
-      })
+        try {
+          payload = await decryptJson(docKey, data)
+        } catch {
+          setError('Wrong key — this link cannot decrypt the document.')
+          return
+        }
+      }
+      if (cancelled) return
+
+      if (payload?.schema !== DOC_SCHEMA) {
+        setError('This Swarm reference is not a Freedom Docs document.')
+        return
+      }
+      setSnapshot(payload as DocSnapshot)
+    }
+
+    load().catch((err) => {
+      if (!cancelled) setError(err?.message || 'Failed to load document')
+    })
 
     return () => {
       cancelled = true
     }
-  }, [reference])
+  }, [reference, docKey])
 
   const renderNavbar = () => (
     <div className="w-full flex items-center justify-between gap-4 px-3 py-1.5">
