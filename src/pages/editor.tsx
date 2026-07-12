@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
 import type { JSONContent } from '@tiptap/core'
 import {
   DOC_SCHEMA,
+  DocRecord,
   DocSnapshot,
   DocWriter,
   getDoc,
@@ -29,7 +30,14 @@ const SWARM_REF_REGEX = /^[0-9a-fA-F]{64}$/
 export const EditorPage = () => {
   const { docId } = useParams()
   const navigate = useNavigate()
-  const doc = useMemo(() => (docId ? getDoc(docId) : undefined), [docId])
+  // Live copy of the doc record: refreshed after every mutation so share
+  // links, the collaborator card, and sync targets appear without a reload.
+  const [doc, setDoc] = useState<DocRecord | undefined>(() =>
+    docId ? getDoc(docId) : undefined
+  )
+  const refreshDoc = useCallback(() => {
+    if (docId) setDoc(getDoc(docId))
+  }, [docId])
 
   const isCollaborator = doc?.role === 'collaborator'
   // The doc's public identity: the owner's feed (own feed for owners)
@@ -63,9 +71,19 @@ export const EditorPage = () => {
   } | null>(isShared ? null : { key: 0, content: contentRef.current ?? '' })
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  /** Fetch all writer states and (re)mount the editor with merged content. */
+  /**
+   * Fetch all writer states and (re)mount the editor with merged content.
+   * Reads the doc record fresh from the store so it never acts on stale
+   * refs/keys captured before a publish.
+   */
   const syncFromSwarm = useCallback(async () => {
-    if (!docId || !docIdentityRef || !docKey) {
+    const current = docId ? getDoc(docId) : undefined
+    const collaborator = current?.role === 'collaborator'
+    const identityRef = collaborator
+      ? current?.sharedFrom
+      : current?.manifestRef
+    const key = current?.keyB64
+    if (!docId || !identityRef || !key) {
       setEditorInput((prev) => prev ?? { key: 0, content: contentRef.current ?? '' })
       setSyncing(false)
       return
@@ -73,19 +91,20 @@ export const EditorPage = () => {
     try {
       setSyncing(true)
       setSyncError(null)
-      const remote = await fetchRemoteDocState(docIdentityRef, docKey)
-      if (isCollaborator && remote.name) {
+      const remote = await fetchRemoteDocState(identityRef, key)
+      if (collaborator && remote.name) {
         setDocName(remote.name)
         updateDoc(docId, { name: remote.name })
       }
-      if (!isCollaborator && remote.writers.length !== writers.length) {
-        setWriters(remote.writers)
-      }
+      // Owner: the local writers list is authoritative (the descriptor is
+      // published from it) — never overwrite it from a feed read, which may
+      // lag right after a republish.
       setEditorInput((prev) => ({
         key: (prev?.key ?? 0) + 1,
         content: mergeInitialContent(remote.states, contentRef.current),
       }))
       setSyncedAt(Date.now())
+      refreshDoc()
     } catch (err: any) {
       console.error(err)
       setSyncError(err?.message || 'Sync failed')
@@ -94,7 +113,7 @@ export const EditorPage = () => {
     } finally {
       setSyncing(false)
     }
-  }, [docId, docIdentityRef, docKey, isCollaborator, writers.length])
+  }, [docId, refreshDoc])
 
   // Shared docs sync on open
   useEffect(() => {
@@ -183,6 +202,7 @@ export const EditorPage = () => {
       ],
     })
     setVersions(updated?.versions || [])
+    refreshDoc()
   }
 
   const onPublish = async () => {
@@ -210,12 +230,14 @@ export const EditorPage = () => {
     setWriters(next)
     setNewWriterRef('')
     setNewWriterLabel('')
-    // Republish immediately so the descriptor lists the new writer
+    // Republish immediately so the descriptor lists the new writer,
+    // then pull their stream right away.
     try {
       setPublishState('publishing')
       await publish(next)
       setPublishState('published')
       setTimeout(() => setPublishState('idle'), 2500)
+      await syncFromSwarm()
     } catch (err: any) {
       setPublishError(err?.message || 'Failed to publish collaborator list')
       setPublishState('error')
