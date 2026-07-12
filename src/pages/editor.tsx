@@ -265,7 +265,15 @@ export const EditorPage = () => {
   }
 
   const renderNavbar = () => (
-    <div className="w-full flex items-center justify-between gap-4 px-3 py-1.5">
+    <div
+      // The editor renders its navbar and toolbar as sibling fixed bars, both
+      // z-45 with the toolbar painted later — dropdowns inside the navbar
+      // would be covered. Lift the host <nav> one level so they layer above.
+      ref={(el) => {
+        const nav = el?.closest('nav') as HTMLElement | null
+        if (nav) nav.style.zIndex = '46'
+      }}
+      className="w-full flex items-center justify-between gap-4 px-3 py-1.5">
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={() => navigate('/')}
