@@ -4,7 +4,9 @@ import { EditorPage } from './pages/editor'
 import { ViewerPage } from './pages/viewer'
 import { JoinPage } from './pages/join'
 import '@fileverse-dev/ddoc/styles'
-import '@fileverse-dev/dsheet/styles'
+// NOTE: dsheet's CSS is NOT imported globally — it ships a Tailwind reset
+// that clobbers our app + ddoc styling. It loads lazily with the sheet
+// editor chunk (see lib/sheet-editor.tsx) so docs never see it.
 
 const App = () => {
   return (

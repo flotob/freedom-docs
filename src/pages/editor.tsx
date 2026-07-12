@@ -4,10 +4,8 @@ import { DdocEditor } from '@fileverse-dev/ddoc'
 import type { JSONContent } from '@tiptap/core'
 import { mergeYjsStates } from '../lib/yjs-merge'
 
-// The spreadsheet engine is heavy — load it only when a sheet is opened
-const DSheetEditor = lazy(() =>
-  import('@fileverse-dev/dsheet').then((m) => ({ default: m.DSheetEditor }))
-)
+// The spreadsheet engine (and its CSS) loads only when a sheet is opened
+const DSheetEditor = lazy(() => import('../lib/sheet-editor'))
 import {
   DOC_SCHEMA,
   DocRecord,
@@ -373,9 +371,14 @@ export const EditorPage = () => {
           <button
             onClick={syncFromSwarm}
             disabled={syncing}
+            style={
+              remoteChanged
+                ? { backgroundColor: '#2563eb', color: '#fff', borderColor: '#2563eb' }
+                : undefined
+            }
             className={
               remoteChanged
-                ? 'text-[12px] text-white bg-blue-600 hover:bg-blue-700 border border-blue-600 rounded-lg px-2 py-1 shrink-0 animate-pulse'
+                ? 'text-[12px] border rounded-lg px-2 py-1 shrink-0 animate-pulse'
                 : 'text-[12px] text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-2 py-1 shrink-0'
             }
             title={

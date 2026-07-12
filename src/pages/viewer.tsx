@@ -3,9 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
 import { mergeYjsStates } from '../lib/yjs-merge'
 
-const DSheetEditor = lazy(() =>
-  import('@fileverse-dev/dsheet').then((m) => ({ default: m.DSheetEditor }))
-)
+const DSheetEditor = lazy(() => import('../lib/sheet-editor'))
 import { DOC_SCHEMA, DocSnapshot } from '../lib/docs-store'
 import { getSwarmJson } from '../lib/swarm'
 import { decryptJson, isEncryptedEnvelope } from '../lib/crypto'

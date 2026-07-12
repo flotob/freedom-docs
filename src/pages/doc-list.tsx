@@ -118,7 +118,8 @@ export const DocList = () => {
           </button>
           <button
             onClick={onNewSheet}
-            className="bg-emerald-700 text-white rounded-lg px-5 py-2.5 text-[15px] font-medium hover:bg-emerald-800"
+            style={{ backgroundColor: '#047857' }}
+            className="text-white rounded-lg px-5 py-2.5 text-[15px] font-medium hover:opacity-90"
           >
             + New Sheet
           </button>
@@ -177,12 +178,18 @@ export const DocList = () => {
                   </span>
                   {doc.name}
                   {doc.role === 'collaborator' && (
-                    <span className="text-[11px] font-normal bg-purple-50 text-purple-700 border border-purple-200 rounded px-1.5 py-0.5">
+                    <span
+                      style={{ backgroundColor: '#faf5ff', color: '#7e22ce', borderColor: '#e9d5ff' }}
+                      className="text-[11px] font-normal border rounded px-1.5 py-0.5"
+                    >
                       shared with me
                     </span>
                   )}
                   {doc.role !== 'collaborator' && (doc.writers?.length || 0) > 0 && (
-                    <span className="text-[11px] font-normal bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+                    <span
+                      style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
+                      className="text-[11px] font-normal border rounded px-1.5 py-0.5"
+                    >
                       {doc.writers!.length} collaborator
                       {doc.writers!.length > 1 ? 's' : ''}
                     </span>
