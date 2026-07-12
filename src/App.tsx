@@ -4,6 +4,7 @@ import { EditorPage } from './pages/editor'
 import { ViewerPage } from './pages/viewer'
 import { JoinPage } from './pages/join'
 import '@fileverse-dev/ddoc/styles'
+import '@fileverse-dev/dsheet/styles'
 
 const App = () => {
   return (

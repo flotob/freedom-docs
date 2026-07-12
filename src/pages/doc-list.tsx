@@ -44,6 +44,11 @@ export const DocList = () => {
     navigate(`/edit/${doc.id}`)
   }
 
+  const onNewSheet = () => {
+    const doc = createDoc('Untitled Sheet', 'sheet')
+    navigate(`/edit/${doc.id}`)
+  }
+
   const onDelete = (id: string) => {
     deleteDoc(id)
     setDocs(listDocs())
@@ -111,6 +116,12 @@ export const DocList = () => {
           >
             + New Document
           </button>
+          <button
+            onClick={onNewSheet}
+            className="bg-emerald-700 text-white rounded-lg px-5 py-2.5 text-[15px] font-medium hover:bg-emerald-800"
+          >
+            + New Sheet
+          </button>
           <div className="flex-1 flex gap-2">
             <input
               value={openRef}
@@ -161,6 +172,9 @@ export const DocList = () => {
             >
               <div className="flex flex-col gap-1">
                 <span className="font-medium text-[15px] flex items-center gap-2">
+                  <span className="text-gray-400 text-[13px]">
+                    {doc.kind === 'sheet' ? '▦' : '≣'}
+                  </span>
                   {doc.name}
                   {doc.role === 'collaborator' && (
                     <span className="text-[11px] font-normal bg-purple-50 text-purple-700 border border-purple-200 rounded px-1.5 py-0.5">

@@ -25,9 +25,13 @@ export type DocWriter = {
   feedRef: string
 }
 
+export type DocKind = 'doc' | 'sheet'
+
 export type DocRecord = {
   id: string
   name: string
+  // 'doc' (rich text, default) or 'sheet' (spreadsheet)
+  kind?: DocKind
   createdAt: number
   updatedAt: number
   // Per-doc AES-256-GCM key (base64url). Docs created before E2EE lack it
@@ -53,6 +57,8 @@ export type DocRecord = {
 export type DocSnapshot = {
   schema: typeof DOC_SCHEMA
   name: string
+  // 'doc' when absent (pre-sheets snapshots)
+  kind?: DocKind
   // Base64-encoded Yjs full state (what the editor's onChange emits)
   content: JSONContent | string
   publishedAt: number
@@ -81,10 +87,11 @@ const saveIndex = (docs: DocRecord[]) => {
 export const getDoc = (id: string): DocRecord | undefined =>
   listDocs().find((doc) => doc.id === id)
 
-export const createDoc = (name = 'Untitled'): DocRecord => {
+export const createDoc = (name = 'Untitled', kind: DocKind = 'doc'): DocRecord => {
   const doc: DocRecord = {
     id: nanoid(12),
     name,
+    kind,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     keyB64: generateDocKey(),

@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
 import type { JSONContent } from '@tiptap/core'
+import { mergeYjsStates } from '../lib/yjs-merge'
+
+// The spreadsheet engine is heavy — load it only when a sheet is opened
+const DSheetEditor = lazy(() =>
+  import('@fileverse-dev/dsheet').then((m) => ({ default: m.DSheetEditor }))
+)
 import {
   DOC_SCHEMA,
   DocRecord,
@@ -55,6 +61,7 @@ export const EditorPage = () => {
   // The doc's public identity: the owner's feed (own feed for owners)
   const docIdentityRef = isCollaborator ? doc?.sharedFrom : doc?.manifestRef
   const isShared = Boolean(isCollaborator || doc?.writers?.length)
+  const isSheet = doc?.kind === 'sheet'
 
   const [docName, setDocName] = useState(doc?.name || 'Untitled')
   const [zoomLevel, setZoomLevel] = useState('1')
@@ -109,7 +116,7 @@ export const EditorPage = () => {
       const remote = await fetchRemoteDocState(identityRef, key)
       if (collaborator && remote.name) {
         setDocName(remote.name)
-        updateDoc(docId, { name: remote.name })
+        updateDoc(docId, { name: remote.name, kind: remote.kind })
       }
       // Owner: the local writers list is authoritative (the descriptor is
       // published from it) — never overwrite it from a feed read, which may
@@ -164,11 +171,19 @@ export const EditorPage = () => {
     return () => clearInterval(timer)
   }, [docId])
 
+  // Flush the debounced local save when leaving — the last edit before a
+  // navigation/close must not lose the race with the save timer.
   useEffect(() => {
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
+    const flush = () => {
+      if (docId && contentRef.current) saveContent(docId, contentRef.current)
     }
-  }, [])
+    window.addEventListener('beforeunload', flush)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      flush()
+    }
+  }, [docId])
 
   const onChange = useCallback(
     (updatedDocContent: string | JSONContent) => {
@@ -208,6 +223,7 @@ export const EditorPage = () => {
     const snapshot: DocSnapshot = {
       schema: DOC_SCHEMA,
       name: docName,
+      kind: doc?.kind || 'doc',
       content: contentRef.current ?? '',
       publishedAt: Date.now(),
       // Only the owner's descriptor lists writers
@@ -565,6 +581,40 @@ export const EditorPage = () => {
             Syncing shared document from Swarm…
           </div>
         </div>
+      </main>
+    )
+  }
+
+  if (isSheet) {
+    // The sheet editor takes a single merged Yjs state (portalContent) and
+    // emits the full state as onChange's second argument.
+    const states = Array.isArray(editorInput.content)
+      ? editorInput.content
+      : typeof editorInput.content === 'string' && editorInput.content
+        ? [editorInput.content]
+        : []
+    const portalContent = states.length > 0 ? mergeYjsStates(states) : ''
+    return (
+      <main className="min-h-full">
+        <Suspense
+          fallback={
+            <div className="min-h-full flex items-center justify-center pt-32">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
+            </div>
+          }
+        >
+          <DSheetEditor
+            key={editorInput.key}
+            dsheetId={docId!}
+            isNewSheet={portalContent === ''}
+            isAuthorized={true}
+            portalContent={portalContent || undefined}
+            onChange={(_updateData, encodedUpdate) => {
+              if (encodedUpdate) onChange(encodedUpdate)
+            }}
+            renderNavbar={renderNavbar}
+          />
+        </Suspense>
       </main>
     )
   }

@@ -29,6 +29,7 @@ import {
 
 export type RemoteDocState = {
   name: string
+  kind: 'doc' | 'sheet'
   writers: DocWriter[]
   /** Base64 Yjs states from every available writer stream, owner first. */
   states: string[]
@@ -82,6 +83,7 @@ export const fetchRemoteDocState = async (
 
   return {
     name: ownerSnapshot.name,
+    kind: ownerSnapshot.kind === 'sheet' ? 'sheet' : 'doc',
     writers,
     states,
     ownerPublishedAt: ownerSnapshot.publishedAt,

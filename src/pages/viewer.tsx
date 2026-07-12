@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
+import { mergeYjsStates } from '../lib/yjs-merge'
+
+const DSheetEditor = lazy(() =>
+  import('@fileverse-dev/dsheet').then((m) => ({ default: m.DSheetEditor }))
+)
 import { DOC_SCHEMA, DocSnapshot } from '../lib/docs-store'
 import { getSwarmJson } from '../lib/swarm'
 import { decryptJson, isEncryptedEnvelope } from '../lib/crypto'
@@ -110,6 +115,35 @@ export const ViewerPage = () => {
     return (
       <main className="min-h-full flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
+      </main>
+    )
+  }
+
+  if (snapshot.kind === 'sheet') {
+    const states = Array.isArray(snapshot.content)
+      ? (snapshot.content as string[])
+      : typeof snapshot.content === 'string' && snapshot.content
+        ? [snapshot.content]
+        : []
+    const portalContent = states.length > 0 ? mergeYjsStates(states) : ''
+    return (
+      <main className="min-h-full">
+        <Suspense
+          fallback={
+            <div className="min-h-full flex items-center justify-center pt-32">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
+            </div>
+          }
+        >
+          <DSheetEditor
+            dsheetId={`viewer-${reference}`}
+            isNewSheet={false}
+            isAuthorized={false}
+            isReadOnly={true}
+            portalContent={portalContent || undefined}
+            renderNavbar={renderNavbar}
+          />
+        </Suspense>
       </main>
     )
   }
