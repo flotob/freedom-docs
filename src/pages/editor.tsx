@@ -27,6 +27,18 @@ type PublishState = 'idle' | 'publishing' | 'published' | 'error'
 
 const SWARM_REF_REGEX = /^[0-9a-fA-F]{64}$/
 
+/** Cheap fingerprint of writer states to detect unseen remote changes. */
+const fingerprintStates = async (states: string[]): Promise<string> => {
+  const joined = states.join('|')
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(joined)
+  )
+  return Array.from(new Uint8Array(digest).slice(0, 8))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 export const EditorPage = () => {
   const { docId } = useParams()
   const navigate = useNavigate()
@@ -60,6 +72,9 @@ export const EditorPage = () => {
   const [syncing, setSyncing] = useState(isShared)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [syncedAt, setSyncedAt] = useState<number | null>(null)
+  const [remoteChanged, setRemoteChanged] = useState(false)
+  // Fingerprint of the writer states last merged into the editor
+  const lastAppliedHashRef = useRef<string>('')
 
   // Latest editor content (base64 Yjs state), tracked via onChange.
   const contentRef = useRef<JSONContent | string | null>(
@@ -103,6 +118,8 @@ export const EditorPage = () => {
         key: (prev?.key ?? 0) + 1,
         content: mergeInitialContent(remote.states, contentRef.current),
       }))
+      lastAppliedHashRef.current = await fingerprintStates(remote.states)
+      setRemoteChanged(false)
       setSyncedAt(Date.now())
       refreshDoc()
     } catch (err: any) {
@@ -120,6 +137,32 @@ export const EditorPage = () => {
     if (isShared) syncFromSwarm()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Background change detection: poll writer streams and light up the Sync
+  // button when someone published something we haven't merged yet. No
+  // auto-remount — that would steal the cursor mid-typing.
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      const current = docId ? getDoc(docId) : undefined
+      const identityRef =
+        current?.role === 'collaborator'
+          ? current?.sharedFrom
+          : current?.writers?.length
+            ? current?.manifestRef
+            : undefined
+      if (!identityRef || !current?.keyB64 || document.hidden) return
+      try {
+        const remote = await fetchRemoteDocState(identityRef, current.keyB64)
+        const hash = await fingerprintStates(remote.states)
+        if (lastAppliedHashRef.current && hash !== lastAppliedHashRef.current) {
+          setRemoteChanged(true)
+        }
+      } catch {
+        // Silent — polling failures surface on the next manual sync
+      }
+    }, 15000)
+    return () => clearInterval(timer)
+  }, [docId])
 
   useEffect(() => {
     return () => {
@@ -314,14 +357,22 @@ export const EditorPage = () => {
           <button
             onClick={syncFromSwarm}
             disabled={syncing}
-            className="text-[12px] text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-2 py-1 shrink-0"
+            className={
+              remoteChanged
+                ? 'text-[12px] text-white bg-blue-600 hover:bg-blue-700 border border-blue-600 rounded-lg px-2 py-1 shrink-0 animate-pulse'
+                : 'text-[12px] text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-2 py-1 shrink-0'
+            }
             title={
               syncedAt
                 ? `Last synced ${new Date(syncedAt).toLocaleTimeString()}`
                 : 'Fetch collaborators’ latest changes'
             }
           >
-            {syncing ? 'Syncing…' : '⟳ Sync'}
+            {syncing
+              ? 'Syncing…'
+              : remoteChanged
+                ? '⟳ New changes'
+                : '⟳ Sync'}
           </button>
         )}
         {(publishError || syncError) && (
