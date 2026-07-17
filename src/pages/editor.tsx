@@ -34,10 +34,20 @@ import {
 } from '../lib/swarm'
 import { encryptJson, generateDocKey } from '../lib/crypto'
 import { fetchRemoteDocState, mergeInitialContent } from '../lib/shared-doc'
+import {
+  getProfileWriterId,
+  startLiveCollab,
+  type LiveCollabSession,
+  type LivePeer,
+} from '../lib/live-collab'
 
 type PublishState = 'idle' | 'publishing' | 'published' | 'error'
 
 const SWARM_REF_REGEX = /^[0-9a-fA-F]{64}$/
+
+/** How long the local user must be idle before a remote update is auto-merged
+ * (a merge remounts the editor, so we never do it mid-keystroke). */
+const REMOTE_APPLY_IDLE_MS = 2000
 
 /** Cheap fingerprint of writer states to detect unseen remote changes. */
 const fingerprintStates = async (states: string[]): Promise<string> => {
@@ -89,6 +99,26 @@ export const EditorPage = () => {
   // Fingerprint of the writer states last merged into the editor
   const lastAppliedHashRef = useRef<string>('')
 
+  // --- Live collaboration (swarm-kit live: GSOC presence + state relay) ---
+  const writerId = useMemo(() => getProfileWriterId(), [])
+  const liveSessionRef = useRef<LiveCollabSession | null>(null)
+  // Latest full Yjs state seen from each peer writer (convergent per-writer).
+  const remoteByWriterRef = useRef<Map<string, string>>(new Map())
+  // Wall-clock of the last local edit — gates cursor-safe remote apply.
+  const lastLocalEditRef = useRef<number>(0)
+  // Fingerprint of the live states last auto-applied (skip redundant remounts).
+  const lastLiveHashRef = useRef<string>('')
+  // Feed refs currently being added from discovery — dedupes concurrent hints.
+  const discoveringRef = useRef<Set<string>>(new Set())
+  // Stable indirections so the live session never restarts on every render.
+  const publishRef = useRef<(list: DocWriter[]) => Promise<void>>(
+    async () => {}
+  )
+  const liveHandlersRef = useRef<{
+    onPeer: (peer: LivePeer) => void
+    onRemote: (state: string, from: string) => void
+  }>({ onPeer: () => {}, onRemote: () => {} })
+
   // Latest editor content (base64 Yjs state), tracked via onChange.
   const contentRef = useRef<JSONContent | string | null>(
     docId ? loadContent(docId) : null
@@ -119,6 +149,8 @@ export const EditorPage = () => {
   // every parent re-render (publish state, doc refresh, etc.).
   const onSheetChange = useCallback(
     (_data: unknown, encodedUpdate?: string) => {
+      // Delegates to onChange, which timestamps the edit and live-broadcasts
+      // the encoded Yjs state to peers.
       if (encodedUpdate) onChangeRef.current(encodedUpdate)
     },
     []
@@ -160,11 +192,16 @@ export const EditorPage = () => {
       // Owner: the local writers list is authoritative (the descriptor is
       // published from it) — never overwrite it from a feed read, which may
       // lag right after a republish.
+      // Fold in any live states we've received over GSOC that may not have
+      // landed on the durable feeds yet — all Yjs states, CRDT-convergent.
+      const liveStates = [...remoteByWriterRef.current.values()]
+      const mergedStates = [...remote.states, ...liveStates]
       setEditorInput((prev) => ({
         key: (prev?.key ?? 0) + 1,
-        content: mergeInitialContent(remote.states, contentRef.current),
+        content: mergeInitialContent(mergedStates, contentRef.current),
       }))
       lastAppliedHashRef.current = await fingerprintStates(remote.states)
+      lastLiveHashRef.current = await fingerprintStates(liveStates)
       setRemoteChanged(false)
       setSyncedAt(Date.now())
       refreshDoc()
@@ -183,6 +220,44 @@ export const EditorPage = () => {
     if (isShared) syncFromSwarm()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /**
+   * Merge the latest live states from peers into the editor (a remount — the
+   * only cursor-safe apply the editor's public API allows). Skips when the set
+   * of live states hasn't changed since the last apply.
+   */
+  const applyRemoteStates = useCallback(async () => {
+    const states = [...remoteByWriterRef.current.values()]
+    if (states.length === 0) return
+    const hash = await fingerprintStates(states)
+    if (hash === lastLiveHashRef.current) {
+      setRemoteChanged(false)
+      return
+    }
+    lastLiveHashRef.current = hash
+    setEditorInput((prev) => ({
+      key: (prev?.key ?? 0) + 1,
+      content: mergeInitialContent(states, contentRef.current),
+    }))
+    setRemoteChanged(false)
+    setSyncedAt(Date.now())
+  }, [])
+
+  // Auto-apply peers' changes when the local user goes idle; otherwise light
+  // the "New changes" affordance so a mid-typing remount never steals focus.
+  const maybeApplyRemote = useCallback(() => {
+    if (remoteByWriterRef.current.size === 0 || document.hidden) return
+    if (Date.now() - lastLocalEditRef.current >= REMOTE_APPLY_IDLE_MS) {
+      void applyRemoteStates()
+    } else {
+      setRemoteChanged(true)
+    }
+  }, [applyRemoteStates])
+
+  useEffect(() => {
+    const timer = setInterval(() => maybeApplyRemote(), 1000)
+    return () => clearInterval(timer)
+  }, [maybeApplyRemote])
 
   // Background change detection: poll writer streams and light up the Sync
   // button when someone published something we haven't merged yet. No
@@ -227,6 +302,12 @@ export const EditorPage = () => {
   const onChange = useCallback(
     (updatedDocContent: string | JSONContent) => {
       contentRef.current = updatedDocContent
+      lastLocalEditRef.current = Date.now()
+      // Live-propagate to peers (only base64 Yjs states are CRDT-mergeable;
+      // JSONContent docs fall back to the durable sync path).
+      if (typeof updatedDocContent === 'string') {
+        liveSessionRef.current?.broadcastState(updatedDocContent)
+      }
       if (!docId) return
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
@@ -303,7 +384,14 @@ export const EditorPage = () => {
     })
     setVersions(updated?.versions || [])
     refreshDoc()
+
+    // A collaborator's first publish creates their writer feed — announce it
+    // over presence so the owner auto-adds them (no card paste needed).
+    if (isCollaborator && manifestRef) {
+      liveSessionRef.current?.announce({ feedRef: manifestRef })
+    }
   }
+  publishRef.current = publish
 
   const onPublish = async () => {
     try {
@@ -353,6 +441,85 @@ export const EditorPage = () => {
       setPublishError(err?.message || 'Failed to publish collaborator list')
     }
   }
+
+  /**
+   * Owner-side: a collaborator announced their writer feed over presence. Add
+   * it to the descriptor and republish, so async readers and the durable
+   * catch-up path see them too — the live replacement for the card handshake.
+   */
+  const addDiscoveredWriter = useCallback(
+    async (peer: LivePeer) => {
+      if (isCollaborator || !peer.feedRef) return
+      const ref = peer.feedRef.trim().toLowerCase()
+      if (!SWARM_REF_REGEX.test(ref)) return
+      if (discoveringRef.current.has(ref)) return
+      const current = getDoc(docId!)
+      if (current?.writers?.some((writer) => writer.feedRef === ref)) return
+      discoveringRef.current.add(ref)
+      try {
+        const next = [
+          ...(current?.writers || []),
+          {
+            feedRef: ref,
+            label:
+              peer.name?.trim() ||
+              `Collaborator ${(current?.writers?.length || 0) + 1}`,
+          },
+        ]
+        setWriters(next)
+        await publishRef.current(next)
+        await syncFromSwarm()
+      } catch (err: any) {
+        setPublishError(err?.message || 'Failed to add collaborator')
+      } finally {
+        discoveringRef.current.delete(ref)
+      }
+    },
+    [isCollaborator, docId, syncFromSwarm]
+  )
+
+  // Keep the session's callbacks pointed at the latest closures without
+  // restarting the GSOC subscription on every render.
+  liveHandlersRef.current.onPeer = addDiscoveredWriter
+  liveHandlersRef.current.onRemote = (state, from) => {
+    remoteByWriterRef.current.set(from, state)
+    maybeApplyRemote()
+  }
+
+  // Start/stop the live session. Runs once the doc has a shareable identity
+  // (post-publish) so the owner is listening for collaborators and every
+  // participant relays edits. Falls back silently when messaging is absent.
+  useEffect(() => {
+    if (!docIdentityRef || !docKey) return
+    let session: LiveCollabSession | null = null
+    let cancelled = false
+    const myFeedRef = isCollaborator ? doc?.manifestRef : docIdentityRef
+    startLiveCollab({
+      docIdentity: docIdentityRef,
+      keyB64: docKey,
+      myWriterId: writerId,
+      myFeedRef,
+      myName: docName,
+      onPeerDiscovered: (peer) => liveHandlersRef.current.onPeer(peer),
+      onRemoteState: (state, from) =>
+        liveHandlersRef.current.onRemote(state, from),
+    })
+      .then((s) => {
+        if (cancelled) {
+          void s?.close()
+          return
+        }
+        session = s
+        liveSessionRef.current = s
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      if (liveSessionRef.current === session) liveSessionRef.current = null
+      void session?.close()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docIdentityRef, docKey, isCollaborator, writerId])
 
   const base = window.location.href.split('#')[0]
   const viewLink =

@@ -17,6 +17,7 @@
     "@fileverse-dev/dsheet": "^2.1.5",
     "@fileverse/crypto": "^0.0.21",
     "@fileverse/ui": "5.1.9",
+    "@freedom/swarm-kit": "github:solardev-xyz/swarm-kit",
     "@tailwindcss/vite": "^4.0.17",
     "framer-motion": "^11.18.2",
     "frimousse": "^0.3.0",
