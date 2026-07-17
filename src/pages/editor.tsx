@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
 import type { JSONContent } from '@tiptap/core'
 import { mergeYjsStates } from '../lib/yjs-merge'
@@ -64,6 +64,13 @@ const fingerprintStates = async (states: string[]): Promise<string> => {
 export const EditorPage = () => {
   const { docId } = useParams()
   const navigate = useNavigate()
+  // When opened from the drive (?return=<url>), the back button returns there.
+  const [searchParams] = useSearchParams()
+  const returnUrl = searchParams.get('return')
+  const goBack = useCallback(() => {
+    if (returnUrl) window.location.href = returnUrl
+    else navigate('/')
+  }, [returnUrl, navigate])
   // Live copy of the doc record: refreshed after every mutation so share
   // links, the collaborator card, and sync targets appear without a reload.
   const [doc, setDoc] = useState<DocRecord | undefined>(() =>
@@ -543,10 +550,10 @@ export const EditorPage = () => {
         <div className="text-center">
           <p className="text-gray-600 mb-4">Document not found on this device.</p>
           <button
-            onClick={() => navigate('/')}
+            onClick={goBack}
             className="text-blue-600 hover:underline"
           >
-            Back to documents
+            {returnUrl ? 'Back to drive' : 'Back to documents'}
           </button>
         </div>
       </main>
@@ -565,10 +572,10 @@ export const EditorPage = () => {
       className="w-full flex items-center justify-between gap-4 px-3 py-1.5">
       <div className="flex items-center gap-3 min-w-0">
         <button
-          onClick={() => navigate('/')}
+          onClick={goBack}
           className="text-gray-500 hover:text-gray-800 text-[14px] shrink-0"
         >
-          ← Docs
+          {returnUrl ? '← Drive' : '← Docs'}
         </button>
         <input
           value={docName}
