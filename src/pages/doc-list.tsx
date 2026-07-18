@@ -1,15 +1,7 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  DocRecord,
-  createDoc,
-  deleteDoc,
-  exportBackup,
-  importBackup,
-  listDocs,
-} from '../lib/docs-store'
-import { isFreedomBrowser } from '../lib/swarm'
 import { B64URL_KEY_REGEX } from '../lib/crypto'
+import { DRIVE_ENTRY } from '../lib/drive-link'
 
 const REF_REGEX = /[0-9a-fA-F]{64}/
 
@@ -28,31 +20,14 @@ const parseShareInput = (
   }
 }
 
-const formatDate = (timestamp: number) =>
-  new Date(timestamp).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
-
+/**
+ * The docs app has no standalone home — your documents live in ddrive
+ * (created there, listed there, opened from there). This page hands off to
+ * the drive, plus a paste-a-link opener for shared documents.
+ */
 export const DocList = () => {
   const navigate = useNavigate()
-  const [docs, setDocs] = useState<DocRecord[]>(listDocs())
   const [openRef, setOpenRef] = useState('')
-
-  const onNewDoc = () => {
-    const doc = createDoc()
-    navigate(`/edit/${doc.id}`)
-  }
-
-  const onNewSheet = () => {
-    const doc = createDoc('Untitled Sheet', 'sheet')
-    navigate(`/edit/${doc.id}`)
-  }
-
-  const onDelete = (id: string) => {
-    deleteDoc(id)
-    setDocs(listDocs())
-  }
 
   const onOpenShared = () => {
     const parsed = parseShareInput(openRef)
@@ -61,160 +36,60 @@ export const DocList = () => {
     }
   }
 
-  const onExportBackup = () => {
-    const backup = exportBackup()
-    const blob = new Blob([JSON.stringify(backup, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `freedom-docs-backup-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const importInputRef = useRef<HTMLInputElement>(null)
-
-  const onImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const backup = JSON.parse(await file.text())
-      const count = importBackup(backup)
-      setDocs(listDocs())
-      alert(`Imported ${count} document(s).`)
-    } catch (err: any) {
-      alert(err?.message || 'Import failed')
-    } finally {
-      e.target.value = ''
-    }
-  }
-
   return (
-    <main className="min-h-full px-4 sm:px-6">
-      <div className="max-w-[860px] mx-auto py-8 flex flex-col gap-8">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold">Freedom Docs</h1>
-          <p className="text-[15px] text-[#77818A]">
-            End-to-end encrypted documents on Ethereum Swarm, published through
-            your own node in Freedom Browser. Only people you hand the share
-            link to can read them. No accounts, no servers.
-          </p>
-          {!isFreedomBrowser() && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[14px] text-amber-800">
-              No Swarm provider detected — you can write and read locally, but
-              publishing needs Freedom Browser.
-            </div>
-          )}
+    <main className="min-h-dvh flex flex-col bg-[var(--frame-bg)] text-[var(--text)]">
+      <header className="flex items-center gap-2.5 px-6 py-5 sm:px-8">
+        <div className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--accent)]! text-white">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+          </svg>
         </div>
+        <span className="logotype text-[20px]">ddrive Docs</span>
+      </header>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onNewDoc}
-            className="bg-black text-white rounded-lg px-5 py-2.5 text-[15px] font-medium hover:bg-gray-800"
-          >
-            + New Document
-          </button>
-          <button
-            onClick={onNewSheet}
-            style={{ backgroundColor: '#047857' }}
-            className="text-white rounded-lg px-5 py-2.5 text-[15px] font-medium hover:opacity-90"
-          >
-            + New Sheet
-          </button>
-          <div className="flex-1 flex gap-2">
-            <input
-              value={openRef}
-              onChange={(e) => setOpenRef(e.target.value)}
-              placeholder="Open shared doc: paste a share link or Swarm reference"
-              className="flex-1 bg-white px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-300 text-[14px]"
-            />
-            <button
-              onClick={onOpenShared}
-              className="border border-gray-300 rounded-lg px-4 py-2 text-[14px] hover:bg-gray-100"
-            >
-              Open
-            </button>
+      <div className="flex flex-1 items-start justify-center px-4 pt-[10vh] pb-12 sm:px-6">
+        <div className="w-full max-w-[420px] flex flex-col items-center gap-8 text-center">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-[28px] font-medium leading-tight tracking-[-0.02em]">
+              Your documents live in ddrive
+            </h1>
+            <p className="text-[14.5px] leading-relaxed text-[var(--text-muted)]">
+              Create and open documents and spreadsheets from your drive —
+              they open here in the editor.
+            </p>
           </div>
-        </div>
 
-        <div className="flex items-center gap-4 text-[13px] text-gray-500 -mt-4">
-          <button onClick={onExportBackup} className="hover:text-gray-800">
-            Export backup (docs + keys)
-          </button>
-          <span>·</span>
-          <button
-            onClick={() => importInputRef.current?.click()}
-            className="hover:text-gray-800"
+          <a
+            href={`${DRIVE_ENTRY}#/`}
+            className="flex w-full max-w-[300px] items-center justify-center gap-2.5 rounded-full px-6! py-3.5! text-[15px] font-medium text-white bg-[var(--accent)]! hover:opacity-90"
           >
-            Import backup
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".json"
-            onChange={onImportBackup}
-            className="hidden"
-          />
-        </div>
+            Open ddrive
+          </a>
 
-        <div className="flex flex-col gap-2">
-          {docs.length === 0 && (
-            <div className="text-gray-500 text-[15px] py-8 text-center border border-dashed border-gray-300 rounded-xl">
-              No documents yet — create your first one.
-            </div>
-          )}
-          {docs.map((doc) => (
-            <div
-              key={doc.id}
-              className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:border-gray-300 cursor-pointer"
-              onClick={() => navigate(`/edit/${doc.id}`)}
-            >
-              <div className="flex flex-col gap-1">
-                <span className="font-medium text-[15px] flex items-center gap-2">
-                  <span className="text-gray-400 text-[13px]">
-                    {doc.kind === 'sheet' ? '▦' : '≣'}
-                  </span>
-                  {doc.name}
-                  {doc.role === 'collaborator' && (
-                    <span
-                      style={{ backgroundColor: '#faf5ff', color: '#7e22ce', borderColor: '#e9d5ff' }}
-                      className="text-[11px] font-normal border rounded px-1.5 py-0.5"
-                    >
-                      shared with me
-                    </span>
-                  )}
-                  {doc.role !== 'collaborator' && (doc.writers?.length || 0) > 0 && (
-                    <span
-                      style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
-                      className="text-[11px] font-normal border rounded px-1.5 py-0.5"
-                    >
-                      {doc.writers!.length} collaborator
-                      {doc.writers!.length > 1 ? 's' : ''}
-                    </span>
-                  )}
-                </span>
-                <span className="text-[13px] text-gray-500">
-                  Edited {formatDate(doc.updatedAt)}
-                  {doc.publishedAt && (
-                    <> · Published {formatDate(doc.publishedAt)}</>
-                  )}
-                  {doc.manifestRef && <> · On Swarm</>}
-                </span>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDelete(doc.id)
+          <div className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 flex flex-col gap-3 text-left">
+            <span className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+              Have a share link?
+            </span>
+            <div className="flex gap-2">
+              <input
+                value={openRef}
+                onChange={(e) => setOpenRef(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onOpenShared()
                 }}
-                className="text-gray-400 hover:text-red-500 text-[13px] px-2 py-1"
-                title="Remove from this device (published copies stay on Swarm)"
+                placeholder="Paste a document link or reference"
+                className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--content-bg)] px-4! py-3! text-[14px] text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+              />
+              <button
+                onClick={onOpenShared}
+                disabled={!parseShareInput(openRef)}
+                className="shrink-0 rounded-xl px-4! py-3! text-[14px] font-medium text-white bg-[var(--accent)]! hover:opacity-90 disabled:opacity-50"
               >
-                Remove
+                Open
               </button>
             </div>
-          ))}
+          </div>
         </div>
       </div>
     </main>

@@ -45,7 +45,7 @@ export const ViewerPage = () => {
       if (cancelled) return
 
       if (payload?.schema !== DOC_SCHEMA) {
-        setError('This Swarm reference is not a Freedom Docs document.')
+        setError('This Swarm reference is not a ddrive document.')
         return
       }
 

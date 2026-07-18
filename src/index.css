@@ -1,8 +1,52 @@
 @import 'tailwindcss';
 
+/* Same token system as ddrive: toggling the `dark` class on <html> swaps the
+   CSS custom properties. Components read tokens via bg-[var(--…)]. The two
+   apps are co-deployed and share the persisted theme (drive:theme). */
 :root {
-  --background: #f8f9fa;
-  --foreground: #000000;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #e9eef6;
+  --surface-3: #f8fafd;
+  --frame-bg: #f0f4f9;
+  --content-bg: #ffffff;
+  --text: #1f1f1f;
+  --text-muted: #5f6368;
+  --border: #dadce0;
+  --border-subtle: #e8eaed;
+  --hover: #f1f3f4;
+  --accent: #1a73e8;
+  --search-bg: #e9eef6;
+  --nav-active: #c2e7ff;
+  --nav-active-text: #001d35;
+  --scrollbar: rgba(0, 0, 0, 0.3);
+  --elevated: #ffffff;
+  --elevated-hover: #f5f8ff;
+
+  /* Legacy aliases used by early components */
+  --background: var(--bg);
+  --foreground: var(--text);
+}
+
+html.dark {
+  --bg: #1b1b1b;
+  --surface: #1e1e1e;
+  --surface-2: #2d2f31;
+  --surface-3: #242628;
+  --frame-bg: #232427;
+  --content-bg: #1b1b1b;
+  --text: #e3e3e3;
+  --text-muted: #9aa0a6;
+  --border: #444746;
+  --border-subtle: #333537;
+  --hover: #2d2f31;
+  --accent: #8ab4f8;
+  --search-bg: #2d2f31;
+  --nav-active: #004a77;
+  --nav-active-text: #c2e7ff;
+  --scrollbar: rgba(255, 255, 255, 0.3);
+  --elevated: #3a3d42;
+  --elevated-hover: #45484e;
 }
 
 html,
@@ -12,8 +56,33 @@ body,
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    'Google Sans Text', system-ui, Roboto, 'Helvetica Neue', 'Lato',
+    'Segoe UI', Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans',
+    sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* App logotype (header brand text) */
+.logotype {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Responsive visibility that ALWAYS wins (see the dual-Tailwind gotcha:
+   @fileverse packages ship their own compiled utilities and the last-loaded
+   sheet wins the display cascade). */
+@media (max-width: 767.98px) {
+  .mobile-hidden {
+    display: none !important;
+  }
+}
+@media (min-width: 768px) {
+  .desktop-hidden {
+    display: none !important;
+  }
 }

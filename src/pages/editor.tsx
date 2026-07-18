@@ -33,6 +33,11 @@ import {
   updateDocFeed,
 } from '../lib/swarm'
 import { encryptJson, generateDocKey } from '../lib/crypto'
+import {
+  DRIVE_ENTRY,
+  PENDING_DOC_IMPORT_KEY,
+  getDriveSession,
+} from '../lib/drive-link'
 import { fetchRemoteDocState, mergeInitialContent } from '../lib/shared-doc'
 import {
   getProfileWriterId,
@@ -69,6 +74,9 @@ export const EditorPage = () => {
   const returnUrl = searchParams.get('return')
   const goBack = useCallback(() => {
     if (returnUrl) window.location.href = returnUrl
+    // The drive is the index — land back there when signed in; the docs
+    // home is only a hand-off page.
+    else if (getDriveSession()) window.location.href = `${DRIVE_ENTRY}#/`
     else navigate('/')
   }, [returnUrl, navigate])
   // Live copy of the doc record: refreshed after every mutation so share
@@ -85,6 +93,37 @@ export const EditorPage = () => {
   const docIdentityRef = isCollaborator ? doc?.sharedFrom : doc?.manifestRef
   const isShared = Boolean(isCollaborator || doc?.writers?.length)
   const isSheet = doc?.kind === 'sheet'
+
+  // Link-joined docs aren't in the user's drive index yet — offer to add
+  // them (owner-created docs always arrive via the drive already).
+  const inDriveKey = doc ? `freedom-docs:in-drive:${doc.id}` : ''
+  const [addedToDrive, setAddedToDrive] = useState(
+    () => !!(inDriveKey && localStorage.getItem(inDriveKey))
+  )
+  const canAddToDrive =
+    isCollaborator &&
+    !addedToDrive &&
+    !!doc?.sharedFrom &&
+    !!doc?.keyB64 &&
+    !!getDriveSession()
+  const addToDrive = () => {
+    const session = getDriveSession()
+    if (!session || !doc?.sharedFrom || !doc?.keyB64) return
+    localStorage.setItem(
+      PENDING_DOC_IMPORT_KEY,
+      JSON.stringify({ portalAddress: session.portalAddress, folderId: 'root' })
+    )
+    localStorage.setItem(inDriveKey, '1')
+    setAddedToDrive(true)
+    const query = new URLSearchParams({
+      kind: isSheet ? 'sheet' : 'doc',
+      name: docName || doc.name,
+      docId: doc.id,
+      feedRef: doc.sharedFrom,
+      key: doc.keyB64,
+    })
+    window.location.href = `${DRIVE_ENTRY}#/import?${query.toString()}`
+  }
 
   const [docName, setDocName] = useState(doc?.name || 'Untitled')
   const [zoomLevel, setZoomLevel] = useState('1')
@@ -339,7 +378,7 @@ export const EditorPage = () => {
     const connected = await connectSwarm()
     if (!connected && !hasWritableStorage()) {
       throw new Error(
-        'No Swarm provider available. Open Freedom Docs in Freedom Browser to publish.'
+        'No Swarm provider available. Open ddrive in Freedom Browser to publish.'
       )
     }
 
@@ -578,7 +617,7 @@ export const EditorPage = () => {
           onClick={goBack}
           className="text-gray-500 hover:text-gray-800 text-[14px] shrink-0"
         >
-          {returnUrl ? '← Drive' : '← Docs'}
+          ← ddrive
         </button>
         <input
           value={docName}
@@ -625,6 +664,15 @@ export const EditorPage = () => {
               : remoteChanged
                 ? '⟳ New changes'
                 : '⟳ Sync'}
+          </button>
+        )}
+        {canAddToDrive && (
+          <button
+            onClick={addToDrive}
+            className="text-[12px] text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-2 py-1 shrink-0"
+            title="Save this shared document into your ddrive"
+          >
+            + Add to ddrive
           </button>
         )}
         {(publishError || syncError) && (
