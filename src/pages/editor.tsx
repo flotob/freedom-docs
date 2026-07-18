@@ -628,7 +628,7 @@ export const EditorPage = () => {
         if (nav) nav.style.zIndex = '46'
       }}
       className="w-full flex items-center justify-between gap-4 px-3 py-1.5">
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-1 items-center gap-3 min-w-0">
         <button
           onClick={goBack}
           className="text-[var(--text-muted)] hover:text-[var(--text)] text-[14px] shrink-0"
@@ -639,7 +639,7 @@ export const EditorPage = () => {
           value={docName}
           onChange={(e) => onRename(e.target.value)}
           disabled={isCollaborator}
-          className="font-medium text-[15px] bg-transparent focus:outline-none focus:ring-1 focus:ring-[var(--border)] rounded px-2 py-1 min-w-0 disabled:text-[var(--text-muted)]"
+          className="flex-1 w-full font-medium text-[15px] bg-transparent focus:outline-none focus:ring-1 focus:ring-[var(--border)] rounded px-2 py-1 min-w-0 truncate disabled:text-[var(--text-muted)]"
           title={isCollaborator ? 'Only the owner can rename a shared doc' : undefined}
         />
         {isSheet && sheetStatus && sheetStatus !== 'synced' && (
@@ -869,11 +869,17 @@ export const EditorPage = () => {
           disabled={publishState === 'publishing'}
           className="bg-[var(--accent)]! text-white rounded-lg px-4 py-1.5 text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
         >
-          {publishState === 'publishing'
-            ? 'Publishing…'
-            : publishState === 'published'
-              ? 'Published ✓'
-              : 'Publish to Swarm'}
+          {publishState === 'publishing' ? (
+            'Publishing…'
+          ) : publishState === 'published' ? (
+            'Published ✓'
+          ) : (
+            <>
+              {/* Long label desktop, short on phones (space is precious) */}
+              <span className="mobile-hidden">Publish to Swarm</span>
+              <span className="desktop-hidden">Publish</span>
+            </>
+          )}
         </button>
       </div>
     </div>
