@@ -89,6 +89,9 @@ export const EditorPage = () => {
   const [docName, setDocName] = useState(doc?.name || 'Untitled')
   const [zoomLevel, setZoomLevel] = useState('1')
   const [isNavbarVisible, setIsNavbarVisible] = useState(true)
+  // Slides mode: ddoc converts the doc's markdown into presentable slides
+  // (md2slides) — the feature lives inside the editor, we just host the state.
+  const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [publishState, setPublishState] = useState<PublishState>('idle')
   const [publishError, setPublishError] = useState<string | null>(null)
   const [docKey, setDocKey] = useState<string | null>(doc?.keyB64 || null)
@@ -839,6 +842,9 @@ export const EditorPage = () => {
             onChange={onSheetChange}
             onContentSyncStatusChange={onSheetSyncStatus}
             renderNavbar={renderNavbar}
+            // Unlocks dsheet's built-in Import/Export menu (.xlsx/.csv in,
+            // .xlsx/.csv/.json out) — gated off by default.
+            allowSheetDownload={true}
           />
         </Suspense>
       </main>
@@ -858,6 +864,9 @@ export const EditorPage = () => {
         setIsNavbarVisible={setIsNavbarVisible}
         documentName={docName}
         renderNavbar={renderNavbar}
+        // Built-in Slides mode (md2slides): present the doc as slides.
+        isPresentationMode={isPresentationMode}
+        setIsPresentationMode={setIsPresentationMode}
       />
     </main>
   )

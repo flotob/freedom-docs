@@ -147,6 +147,22 @@ const devBeePublish = async (
   return reference
 }
 
+/** Fetch raw bytes from Swarm (e.g. an uploaded file's content). */
+export const getSwarmBytes = async (reference: string): Promise<Uint8Array> => {
+  let lastError: unknown
+  for (let i = 0; i < 2; i++) {
+    try {
+      const response = await fetch(swarmUrl(reference))
+      if (!response.ok) throw new Error(`Swarm fetch failed: ${response.status}`)
+      return new Uint8Array(await response.arrayBuffer())
+    } catch (error) {
+      lastError = error
+    }
+  }
+  console.error('Swarm fetch failed:', lastError)
+  throw new Error('Failed to load the file from Swarm.')
+}
+
 export const getSwarmJson = async (reference: string) => {
   let lastError: unknown
   for (let i = 0; i < 2; i++) {

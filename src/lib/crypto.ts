@@ -58,6 +58,25 @@ const importKey = (keyB64: string, usage: KeyUsage[]) =>
     usage
   )
 
+/**
+ * Decrypt raw AES-256-GCM bytes with a b64url key + iv. Used by the drive →
+ * docs import handoff: the drive passes an encrypted file's raw content key
+ * and IV in the URL fragment, and we decrypt the fetched ciphertext here.
+ */
+export const decryptBytesWithRawKey = async (
+  ciphertext: Uint8Array,
+  ivB64url: string,
+  keyB64url: string
+): Promise<Uint8Array> => {
+  const key = await importKey(keyB64url, ['decrypt'])
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: b64urlToBytes(ivB64url) as BufferSource },
+    key,
+    ciphertext as BufferSource
+  )
+  return new Uint8Array(plaintext)
+}
+
 // --- envelope encrypt/decrypt ---
 
 export const encryptJson = async (
