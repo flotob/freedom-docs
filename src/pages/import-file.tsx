@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { toUint8Array } from 'js-base64'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useHeadlessEditor } from '@fileverse-dev/ddoc'
 import {
@@ -141,6 +142,11 @@ export const ImportFilePage = () => {
         : await getSwarmBytes(src)
       if (key && iv) {
         setStatus('Decrypting…')
+        // enc=b64: the drive stores ciphertext as base64 text (mobile-safe
+        // string payloads) — decode before decrypting.
+        if (params.get('enc') === 'b64') {
+          bytes = toUint8Array(new TextDecoder().decode(bytes))
+        }
         bytes = await decryptBytesWithRawKey(bytes, iv, key)
       }
 
