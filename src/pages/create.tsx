@@ -28,7 +28,9 @@ import { encryptJson } from '../lib/crypto'
 export const CreatePage = () => {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const kind = params.get('kind') === 'sheet' ? 'sheet' : 'doc'
+  const kindParam = params.get('kind')
+  const kind =
+    kindParam === 'sheet' ? 'sheet' : kindParam === 'slides' ? 'slides' : 'doc'
   const returnTo = params.get('returnTo')
   const [status, setStatus] = useState('Creating…')
   const ranRef = useRef(false)
@@ -39,7 +41,11 @@ export const CreatePage = () => {
 
     const run = async () => {
       const name =
-        kind === 'sheet' ? 'Untitled spreadsheet' : 'Untitled document'
+        kind === 'sheet'
+          ? 'Untitled spreadsheet'
+          : kind === 'slides'
+            ? 'Untitled presentation'
+            : 'Untitled document'
       const doc = createDoc(name, kind)
       const key = doc.keyB64!
 

@@ -122,7 +122,7 @@ export const EditorPage = () => {
     localStorage.setItem(inDriveKey, '1')
     setAddedToDrive(true)
     const query = new URLSearchParams({
-      kind: isSheet ? 'sheet' : 'doc',
+      kind: doc.kind === 'sheet' || doc.kind === 'slides' ? doc.kind : 'doc',
       name: docName || doc.name,
       docId: doc.id,
       feedRef: doc.sharedFrom,
@@ -701,6 +701,15 @@ export const EditorPage = () => {
         )}
       </div>
       <div className="flex items-center gap-3 shrink-0">
+        {doc?.kind === 'slides' && (
+          <button
+            onClick={() => setIsPresentationMode(true)}
+            className="text-[13px] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)] rounded-lg px-3 py-1.5 shrink-0"
+            title="Present this document as slides"
+          >
+            ▶ Present
+          </button>
+        )}
         <button
           onClick={toggleTheme}
           title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
