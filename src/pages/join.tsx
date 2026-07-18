@@ -20,7 +20,7 @@ export const JoinPage = () => {
 
   return (
     <main className="min-h-full flex items-center justify-center">
-      <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
+      <div className="animate-spin rounded-full h-10 w-10 border-4 border-[var(--border)] border-b-gray-800" />
     </main>
   )
 }

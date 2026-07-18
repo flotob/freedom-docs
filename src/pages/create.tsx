@@ -111,8 +111,8 @@ export const CreatePage = () => {
   return (
     <main className="min-h-full flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
-        <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
-        <div className="text-sm text-gray-600">{status}</div>
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-[var(--border)] border-b-gray-800" />
+        <div className="text-sm text-[var(--text-muted)]">{status}</div>
       </div>
     </main>
   )

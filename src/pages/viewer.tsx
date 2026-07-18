@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
+import { getStoredTheme, systemTheme } from '../lib/theme'
 import { mergeYjsStates } from '../lib/yjs-merge'
 
 const DSheetEditor = lazy(() => import('../lib/sheet-editor'))
@@ -79,7 +80,7 @@ export const ViewerPage = () => {
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={() => navigate('/')}
-          className="text-gray-500 hover:text-gray-800 text-[14px] shrink-0"
+          className="text-[var(--text-muted)] hover:text-[var(--text)] text-[14px] shrink-0"
         >
           ← Docs
         </button>
@@ -87,7 +88,7 @@ export const ViewerPage = () => {
           {snapshot?.name || 'Shared document'}
         </span>
       </div>
-      <span className="text-[13px] text-gray-500 shrink-0">
+      <span className="text-[13px] text-[var(--text-muted)] shrink-0">
         Read-only · served from Swarm
       </span>
     </div>
@@ -112,7 +113,7 @@ export const ViewerPage = () => {
   if (!snapshot) {
     return (
       <main className="min-h-full flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-[var(--border)] border-b-gray-800" />
       </main>
     )
   }
@@ -129,7 +130,7 @@ export const ViewerPage = () => {
         <Suspense
           fallback={
             <div className="min-h-full flex items-center justify-center pt-32">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-[var(--border)] border-b-gray-800" />
             </div>
           }
         >
@@ -150,6 +151,7 @@ export const ViewerPage = () => {
     <main className="min-h-full">
       <DdocEditor
         isPreviewMode={true}
+        theme={getStoredTheme() ?? systemTheme()}
         initialContent={snapshot.content}
         zoomLevel={zoomLevel}
         setZoomLevel={setZoomLevel}

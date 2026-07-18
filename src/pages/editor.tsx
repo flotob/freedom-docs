@@ -38,6 +38,12 @@ import {
   PENDING_DOC_IMPORT_KEY,
   getDriveSession,
 } from '../lib/drive-link'
+import {
+  getStoredTheme,
+  setTheme,
+  systemTheme,
+  type Theme,
+} from '../lib/theme'
 import { fetchRemoteDocState, mergeInitialContent } from '../lib/shared-doc'
 import {
   getProfileWriterId,
@@ -126,6 +132,16 @@ export const EditorPage = () => {
   }
 
   const [docName, setDocName] = useState(doc?.name || 'Untitled')
+  // Shared with ddrive ('drive:theme'): ddoc gets the prop, our chrome the
+  // token classes (html.dark toggles the token set).
+  const [theme, setThemeState] = useState<Theme>(
+    () => getStoredTheme() ?? systemTheme()
+  )
+  const toggleTheme = () => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    setThemeState(next)
+    setTheme(next)
+  }
   const [zoomLevel, setZoomLevel] = useState('1')
   const [isNavbarVisible, setIsNavbarVisible] = useState(true)
   // Slides mode: ddoc converts the doc's markdown into presentable slides
@@ -590,7 +606,7 @@ export const EditorPage = () => {
     return (
       <main className="min-h-full flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600 mb-4">Document not found on this device.</p>
+          <p className="text-[var(--text-muted)] mb-4">Document not found on this device.</p>
           <button
             onClick={goBack}
             className="text-blue-600 hover:underline"
@@ -615,7 +631,7 @@ export const EditorPage = () => {
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={goBack}
-          className="text-gray-500 hover:text-gray-800 text-[14px] shrink-0"
+          className="text-[var(--text-muted)] hover:text-[var(--text)] text-[14px] shrink-0"
         >
           ← ddrive
         </button>
@@ -623,7 +639,7 @@ export const EditorPage = () => {
           value={docName}
           onChange={(e) => onRename(e.target.value)}
           disabled={isCollaborator}
-          className="font-medium text-[15px] bg-transparent focus:outline-none focus:ring-1 focus:ring-gray-300 rounded px-2 py-1 min-w-0 disabled:text-gray-500"
+          className="font-medium text-[15px] bg-transparent focus:outline-none focus:ring-1 focus:ring-[var(--border)] rounded px-2 py-1 min-w-0 disabled:text-[var(--text-muted)]"
           title={isCollaborator ? 'Only the owner can rename a shared doc' : undefined}
         />
         {isSheet && sheetStatus && sheetStatus !== 'synced' && (
@@ -651,7 +667,7 @@ export const EditorPage = () => {
             className={
               remoteChanged
                 ? 'text-[12px] border rounded-lg px-2 py-1 shrink-0 animate-pulse'
-                : 'text-[12px] text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-2 py-1 shrink-0'
+                : 'text-[12px] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)] rounded-lg px-2 py-1 shrink-0'
             }
             title={
               syncedAt
@@ -669,7 +685,7 @@ export const EditorPage = () => {
         {canAddToDrive && (
           <button
             onClick={addToDrive}
-            className="text-[12px] text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-2 py-1 shrink-0"
+            className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)] rounded-lg px-2 py-1 shrink-0"
             title="Save this shared document into your ddrive"
           >
             + Add to ddrive
@@ -685,16 +701,23 @@ export const EditorPage = () => {
         )}
       </div>
       <div className="flex items-center gap-3 shrink-0">
+        <button
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+          className="text-[15px] text-[var(--text-muted)] hover:text-[var(--text)] shrink-0"
+        >
+          {theme === 'dark' ? '☀' : '☾'}
+        </button>
         {versions.length > 0 && (
           <div className="relative">
             <button
               onClick={() => setShowHistory((v) => !v)}
-              className="text-[13px] text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-3 py-1.5"
+              className="text-[13px] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)] rounded-lg px-3 py-1.5"
             >
               History ({versions.length})
             </button>
             {showHistory && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[240px] max-h-[300px] overflow-auto z-50">
+              <div className="absolute right-0 top-full mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg py-1 min-w-[240px] max-h-[300px] overflow-auto z-50">
                 {[...versions].reverse().map((version, i) => (
                   <button
                     key={version.ref}
@@ -706,13 +729,13 @@ export const EditorPage = () => {
                           : `/d/${version.ref}`
                       )
                     }}
-                    className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-50 flex justify-between gap-3"
+                    className="w-full text-left px-3 py-2 text-[13px] hover:bg-[var(--hover)]! flex justify-between gap-3"
                   >
                     <span>
                       v{versions.length - i}
-                      {i === 0 && <span className="text-gray-400"> (latest)</span>}
+                      {i === 0 && <span className="text-[var(--text-muted)]"> (latest)</span>}
                     </span>
-                    <span className="text-gray-500">
+                    <span className="text-[var(--text-muted)]">
                       {new Date(version.publishedAt).toLocaleString(undefined, {
                         dateStyle: 'short',
                         timeStyle: 'short',
@@ -728,14 +751,14 @@ export const EditorPage = () => {
           <div className="relative">
             <button
               onClick={() => setShowShare((v) => !v)}
-              className="text-[13px] text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-3 py-1.5"
+              className="text-[13px] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)] rounded-lg px-3 py-1.5"
             >
               Share
             </button>
             {showShare && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-[380px] z-50 flex flex-col gap-3 text-[13px]">
+              <div className="absolute right-0 top-full mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg p-4 w-[380px] z-50 flex flex-col gap-3 text-[13px]">
                 {!viewLink && (
-                  <p className="text-gray-500">
+                  <p className="text-[var(--text-muted)]">
                     Publish once to get shareable links.
                   </p>
                 )}
@@ -744,7 +767,7 @@ export const EditorPage = () => {
                     <span className="font-medium">Read-only link</span>
                     <button
                       onClick={() => copyToClipboard('view', viewLink)}
-                      className="border border-gray-200 rounded px-2 py-1 hover:bg-gray-50"
+                      className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]!"
                     >
                       {copied === 'view' ? 'Copied!' : 'Copy'}
                     </button>
@@ -755,7 +778,7 @@ export const EditorPage = () => {
                     <span className="font-medium">Edit link</span>
                     <button
                       onClick={() => copyToClipboard('edit', editLink)}
-                      className="border border-gray-200 rounded px-2 py-1 hover:bg-gray-50"
+                      className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]!"
                     >
                       {copied === 'edit' ? 'Copied!' : 'Copy'}
                     </button>
@@ -767,18 +790,18 @@ export const EditorPage = () => {
                     <div className="font-medium mb-1">Your collaborator card</div>
                     {myCard ? (
                       <div className="flex items-center gap-2">
-                        <code className="text-[11px] break-all flex-1 bg-gray-50 rounded p-2">
+                        <code className="text-[11px] break-all flex-1 bg-[var(--surface-2)] rounded p-2">
                           {myCard}
                         </code>
                         <button
                           onClick={() => copyToClipboard('card', myCard)}
-                          className="border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 shrink-0"
+                          className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]! shrink-0"
                         >
                           {copied === 'card' ? 'Copied!' : 'Copy'}
                         </button>
                       </div>
                     ) : (
-                      <p className="text-gray-500">
+                      <p className="text-[var(--text-muted)]">
                         Publish once to create your writer stream, then send
                         this card to the owner so they can add you.
                       </p>
@@ -798,13 +821,13 @@ export const EditorPage = () => {
                       >
                         <span className="truncate" title={writer.feedRef}>
                           {writer.label}{' '}
-                          <span className="text-gray-400">
+                          <span className="text-[var(--text-muted)]">
                             {writer.feedRef.slice(0, 8)}…
                           </span>
                         </span>
                         <button
                           onClick={() => onRemoveWriter(writer.feedRef)}
-                          className="text-gray-400 hover:text-red-500"
+                          className="text-[var(--text-muted)] hover:text-red-500"
                         >
                           Remove
                         </button>
@@ -815,23 +838,23 @@ export const EditorPage = () => {
                         value={newWriterLabel}
                         onChange={(e) => setNewWriterLabel(e.target.value)}
                         placeholder="Name"
-                        className="w-[100px] border border-gray-200 rounded px-2 py-1"
+                        className="w-[100px] border border-[var(--border)] rounded px-2 py-1"
                       />
                       <input
                         value={newWriterRef}
                         onChange={(e) => setNewWriterRef(e.target.value)}
                         placeholder="Paste collaborator card (64-hex)"
-                        className="flex-1 border border-gray-200 rounded px-2 py-1"
+                        className="flex-1 border border-[var(--border)] rounded px-2 py-1"
                       />
                       <button
                         onClick={onAddWriter}
                         disabled={!SWARM_REF_REGEX.test(newWriterRef.trim())}
-                        className="border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+                        className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]! disabled:opacity-40"
                       >
                         Add
                       </button>
                     </div>
-                    <p className="text-gray-400 text-[12px]">
+                    <p className="text-[var(--text-muted)] text-[12px]">
                       Send the edit link to a collaborator; they publish once
                       and send you back their collaborator card.
                     </p>
@@ -844,7 +867,7 @@ export const EditorPage = () => {
         <button
           onClick={onPublish}
           disabled={publishState === 'publishing'}
-          className="bg-black text-white rounded-lg px-4 py-1.5 text-[14px] font-medium hover:bg-gray-800 disabled:opacity-50"
+          className="bg-[var(--accent)]! text-white rounded-lg px-4 py-1.5 text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
         >
           {publishState === 'publishing'
             ? 'Publishing…'
@@ -860,8 +883,8 @@ export const EditorPage = () => {
     return (
       <main className="min-h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
-          <div className="text-sm text-gray-600">
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-[var(--border)] border-b-gray-800" />
+          <div className="text-sm text-[var(--text-muted)]">
             Syncing shared document from Swarm…
           </div>
         </div>
@@ -877,7 +900,7 @@ export const EditorPage = () => {
         <Suspense
           fallback={
             <div className="min-h-full flex items-center justify-center pt-32">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-b-gray-800" />
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-[var(--border)] border-b-gray-800" />
             </div>
           }
         >
@@ -912,6 +935,7 @@ export const EditorPage = () => {
         setIsNavbarVisible={setIsNavbarVisible}
         documentName={docName}
         renderNavbar={renderNavbar}
+        theme={theme}
         // Built-in Slides mode (md2slides): present the doc as slides.
         isPresentationMode={isPresentationMode}
         setIsPresentationMode={setIsPresentationMode}
