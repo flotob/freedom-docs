@@ -32,6 +32,7 @@ import {
   publishJson,
   supportsFeeds,
   updateDocFeed,
+  SwarmNotFoundError,
 } from '../lib/swarm'
 import { encryptJson, generateDocKey } from '../lib/crypto'
 import {
@@ -294,7 +295,13 @@ export const EditorPage = () => {
       refreshDoc()
     } catch (err: any) {
       console.error(err)
-      setSyncError(err?.message || 'Sync failed')
+      // An empty owner feed = the doc was shared before its first save —
+      // normal for edit links, not a failure worth alarming over.
+      setSyncError(
+        err instanceof SwarmNotFoundError
+          ? "The owner hasn't saved this document yet — it will appear here once they do."
+          : err?.message || 'Sync failed'
+      )
       // Still let the user edit locally
       setEditorInput((prev) => prev ?? { key: 0, content: contentRef.current ?? '' })
     } finally {

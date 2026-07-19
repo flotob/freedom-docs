@@ -6,7 +6,7 @@ import { mergeYjsStates } from '../lib/yjs-merge'
 
 const DSheetEditor = lazy(() => import('../lib/sheet-editor'))
 import { DOC_SCHEMA, DocSnapshot } from '../lib/docs-store'
-import { getSwarmJson } from '../lib/swarm'
+import { SwarmNotFoundError, getSwarmJson } from '../lib/swarm'
 import { decryptJson, isEncryptedEnvelope } from '../lib/crypto'
 import { fetchRemoteDocState } from '../lib/shared-doc'
 
@@ -23,6 +23,10 @@ export const ViewerPage = () => {
     return () => applyTheme(getStoredTheme() ?? systemTheme())
   }, [isSheetSnapshot])
   const [error, setError] = useState<string | null>(null)
+  // Share links exist BEFORE the doc's first save (the feed is minted at
+  // creation) — an empty feed is a normal state, not a broken link.
+  const [notYetSaved, setNotYetSaved] = useState(false)
+  const [retry, setRetry] = useState(0)
   const [zoomLevel, setZoomLevel] = useState('1')
   const [isNavbarVisible, setIsNavbarVisible] = useState(true)
 
@@ -31,6 +35,7 @@ export const ViewerPage = () => {
     let cancelled = false
     setSnapshot(null)
     setError(null)
+    setNotYetSaved(false)
 
     const load = async () => {
       const data = await getSwarmJson(reference)
@@ -75,13 +80,15 @@ export const ViewerPage = () => {
     }
 
     load().catch((err) => {
-      if (!cancelled) setError(err?.message || 'Failed to load document')
+      if (cancelled) return
+      if (err instanceof SwarmNotFoundError) setNotYetSaved(true)
+      else setError(err?.message || 'Failed to load document')
     })
 
     return () => {
       cancelled = true
     }
-  }, [reference, docKey])
+  }, [reference, docKey, retry])
 
   const renderNavbar = () => (
     <div className="w-full flex items-center justify-between gap-4 px-3 py-1.5">
@@ -101,6 +108,30 @@ export const ViewerPage = () => {
       </span>
     </div>
   )
+
+  if (notYetSaved) {
+    return (
+      <main className="min-h-full flex items-center justify-center">
+        <div className="text-center max-w-[420px] px-6">
+          <div className="text-[40px] mb-3">📄</div>
+          <h1 className="text-[18px] font-medium text-[var(--text)] mb-2">
+            Nothing here yet
+          </h1>
+          <p className="text-[14px] text-[var(--text-muted)] mb-6">
+            This link is valid, but the document hasn't been saved by its
+            owner yet. Once they save it, this page will show the latest
+            version — check back in a bit.
+          </p>
+          <button
+            onClick={() => setRetry((n) => n + 1)}
+            className="border border-[var(--border)] rounded-lg px-4 py-2 text-[14px] text-[var(--text)] hover:bg-[var(--hover)]!"
+          >
+            Check again
+          </button>
+        </div>
+      </main>
+    )
+  }
 
   if (error) {
     return (

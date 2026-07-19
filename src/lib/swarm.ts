@@ -147,33 +147,54 @@ const devBeePublish = async (
   return reference
 }
 
-/** Fetch raw bytes from Swarm (e.g. an uploaded file's content). */
-export const getSwarmBytes = async (reference: string): Promise<Uint8Array> => {
+/**
+ * The reference resolved cleanly to "nothing there" (HTTP 404) — for a doc
+ * feed that means NO SNAPSHOT HAS BEEN SAVED YET, not a broken link: share
+ * links are minted with the feed at creation, before the first save. Kept
+ * distinct so viewers can show "nothing here yet" instead of an error.
+ */
+export class SwarmNotFoundError extends Error {
+  constructor() {
+    super('Nothing is published at this Swarm reference yet.')
+    this.name = 'SwarmNotFoundError'
+  }
+}
+
+const fetchSwarm = async (reference: string): Promise<Response> => {
   let lastError: unknown
   for (let i = 0; i < 2; i++) {
     try {
       const response = await fetch(swarmUrl(reference))
+      // 404 is a definitive answer, not a transient failure — don't retry.
+      if (response.status === 404) throw new SwarmNotFoundError()
       if (!response.ok) throw new Error(`Swarm fetch failed: ${response.status}`)
-      return new Uint8Array(await response.arrayBuffer())
+      return response
     } catch (error) {
+      if (error instanceof SwarmNotFoundError) throw error
       lastError = error
     }
   }
   console.error('Swarm fetch failed:', lastError)
-  throw new Error('Failed to load the file from Swarm.')
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
+/** Fetch raw bytes from Swarm (e.g. an uploaded file's content). */
+export const getSwarmBytes = async (reference: string): Promise<Uint8Array> => {
+  try {
+    const response = await fetchSwarm(reference)
+    return new Uint8Array(await response.arrayBuffer())
+  } catch (error) {
+    if (error instanceof SwarmNotFoundError) throw error
+    throw new Error('Failed to load the file from Swarm.')
+  }
 }
 
 export const getSwarmJson = async (reference: string) => {
-  let lastError: unknown
-  for (let i = 0; i < 2; i++) {
-    try {
-      const response = await fetch(swarmUrl(reference))
-      if (!response.ok) throw new Error(`Swarm fetch failed: ${response.status}`)
-      return await response.json()
-    } catch (error) {
-      lastError = error
-    }
+  try {
+    const response = await fetchSwarm(reference)
+    return await response.json()
+  } catch (error) {
+    if (error instanceof SwarmNotFoundError) throw error
+    throw new Error('Failed to load the document from Swarm.')
   }
-  console.error('Swarm fetch failed:', lastError)
-  throw new Error('Failed to load the document from Swarm.')
 }
