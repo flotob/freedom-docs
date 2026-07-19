@@ -75,6 +75,17 @@ export type DocSnapshot = {
 
 const INDEX_KEY = 'freedom-docs:index'
 const contentKey = (id: string) => `freedom-docs:content:${id}`
+// Fingerprint of the content as of the last successful save-to-Swarm.
+// Survives reloads, unlike an in-memory baseline — the editor compares the
+// local working copy against it to know whether unsaved changes exist.
+const savedFingerprintKey = (id: string) => `freedom-docs:saved-fp:${id}`
+
+export const getSavedFingerprint = (id: string): string | null =>
+  localStorage.getItem(savedFingerprintKey(id))
+
+export const setSavedFingerprint = (id: string, fingerprint: string) => {
+  localStorage.setItem(savedFingerprintKey(id), fingerprint)
+}
 
 export const listDocs = (): DocRecord[] => {
   try {
@@ -122,6 +133,7 @@ export const updateDoc = (
 export const deleteDoc = (id: string) => {
   saveIndex(listDocs().filter((doc) => doc.id !== id))
   localStorage.removeItem(contentKey(id))
+  localStorage.removeItem(savedFingerprintKey(id))
 }
 
 export const loadContent = (id: string): JSONContent | string | null => {

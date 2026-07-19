@@ -21,8 +21,10 @@ import {
   DocSnapshot,
   DocWriter,
   getDoc,
+  getSavedFingerprint,
   loadContent,
   saveContent,
+  setSavedFingerprint,
   updateDoc,
 } from '../lib/docs-store'
 import {
@@ -210,6 +212,33 @@ export const EditorPage = () => {
   // onChange — adopt that emission as the new baseline instead of flagging
   // it as an unsaved edit the user never made.
   const adoptNextChangeAsBaselineRef = useRef(false)
+
+  // The in-memory baseline dies with the page: edit → reload → the unsaved
+  // local content BECOMES the baseline and Save wrongly reads clean. The
+  // durable fingerprint (stored on every successful save) catches this —
+  // if the local working copy doesn't match what was last saved to Swarm,
+  // there are unsaved changes, no matter how many reloads happened.
+  useEffect(() => {
+    if (!docId) return
+    const stored = getSavedFingerprint(docId)
+    if (!stored || contentRef.current == null) return
+    const text =
+      typeof contentRef.current === 'string'
+        ? contentRef.current
+        : JSON.stringify(contentRef.current)
+    let cancelled = false
+    fingerprintStates([text]).then((fp) => {
+      if (cancelled || fp === stored) return
+      // Poison the in-memory baseline so an undo back to the open-state
+      // can't clear the flag — only an actual save does.
+      savedBaselineRef.current = null
+      setDirty(true)
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docId])
   // Stable indirection to the change handler (defined below) so the sheet's
   // onChange prop can be identity-stable.
   const onChangeRef = useRef<(c: string | JSONContent) => void>(() => {})
@@ -494,6 +523,13 @@ export const EditorPage = () => {
     refreshDoc()
     savedBaselineRef.current = contentRef.current
     setDirty(false)
+    // Persist what "saved" looks like so the dirty check survives reloads.
+    {
+      const saved = contentRef.current
+      const text =
+        saved == null ? '' : typeof saved === 'string' ? saved : JSON.stringify(saved)
+      void fingerprintStates([text]).then((fp) => setSavedFingerprint(docId, fp))
+    }
 
     // A collaborator's first publish creates their writer feed — announce it
     // over presence so the owner auto-adds them (no card paste needed).
@@ -960,7 +996,7 @@ export const EditorPage = () => {
                   {/* Thick bottom padding: mobile Freedom Browser floats its
                       address pill OVER the page bottom, so the drawer's last
                       rows must clear it (safe-area inset alone is not it). */}
-                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] p-4 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] max-h-[80vh] overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
+                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] p-4 pb-[calc(env(safe-area-inset-bottom)+11rem)] max-h-[85vh] overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
                     <div className="mx-auto h-1 w-10 rounded-full bg-[var(--border)]" />
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-[15px]">Share</span>
