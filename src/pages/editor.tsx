@@ -927,7 +927,16 @@ export const EditorPage = () => {
         {(viewLink || myCard || !isCollaborator) && (
           <div className="relative">
             <button
-              onClick={() => setShowShare((v) => !v)}
+              onClick={() => {
+                // Re-read the record first: the drive mints the doc's feed in
+                // the background AFTER this editor mounts, and links derive
+                // from it — without this, an unsaved doc offers links only
+                // when the tab happened to open late (nondeterministic).
+                // Share-early is deliberate: links are valid from creation;
+                // the viewer shows "nothing here yet" until the first save.
+                refreshDoc()
+                setShowShare((v) => !v)
+              }}
               className="text-[13px] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)] rounded-lg px-3 py-1.5"
             >
               Share
@@ -948,7 +957,10 @@ export const EditorPage = () => {
                     className="absolute inset-0 bg-black/40"
                     onClick={() => setShowShare(false)}
                   />
-                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-h-[75vh] overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
+                  {/* Thick bottom padding: mobile Freedom Browser floats its
+                      address pill OVER the page bottom, so the drawer's last
+                      rows must clear it (safe-area inset alone is not it). */}
+                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] p-4 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] max-h-[80vh] overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
                     <div className="mx-auto h-1 w-10 rounded-full bg-[var(--border)]" />
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-[15px]">Share</span>
