@@ -25,7 +25,7 @@ export type DocWriter = {
   feedRef: string
 }
 
-export type DocKind = 'doc' | 'sheet' | 'slides'
+export type DocKind = 'doc' | 'sheet'
 
 export type DocRecord = {
   id: string
