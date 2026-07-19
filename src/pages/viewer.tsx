@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
-import { getStoredTheme, systemTheme } from '../lib/theme'
+import { applyTheme, getStoredTheme, systemTheme } from '../lib/theme'
 import { mergeYjsStates } from '../lib/yjs-merge'
 
 const DSheetEditor = lazy(() => import('../lib/sheet-editor'))
@@ -14,6 +14,14 @@ export const ViewerPage = () => {
   const { reference, docKey } = useParams()
   const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState<DocSnapshot | null>(null)
+
+  // Sheets are light-only (dsheet limitation) — force light while viewing.
+  const isSheetSnapshot = snapshot?.kind === 'sheet'
+  useEffect(() => {
+    if (!isSheetSnapshot) return
+    applyTheme('light')
+    return () => applyTheme(getStoredTheme() ?? systemTheme())
+  }, [isSheetSnapshot])
   const [error, setError] = useState<string | null>(null)
   const [zoomLevel, setZoomLevel] = useState('1')
   const [isNavbarVisible, setIsNavbarVisible] = useState(true)

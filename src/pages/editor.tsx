@@ -39,6 +39,7 @@ import {
   getDriveSession,
 } from '../lib/drive-link'
 import {
+  applyTheme,
   getStoredTheme,
   setTheme,
   systemTheme,
@@ -142,6 +143,14 @@ export const EditorPage = () => {
     setThemeState(next)
     setTheme(next)
   }
+  // dsheet has NO dark theme (its grid can't be restyled), and a dark shell
+  // whose text tokens leak into a white canvas is unreadable. Sheets force
+  // the light token set while open; the chosen theme returns on unmount.
+  useEffect(() => {
+    if (!isSheet) return
+    applyTheme('light')
+    return () => applyTheme(getStoredTheme() ?? systemTheme())
+  }, [isSheet])
   const [zoomLevel, setZoomLevel] = useState('1')
   const [isNavbarVisible, setIsNavbarVisible] = useState(true)
   // Slides mode: ddoc converts the doc's markdown into presentable slides
@@ -701,13 +710,16 @@ export const EditorPage = () => {
         )}
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        <button
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
-          className="text-[15px] text-[var(--text-muted)] hover:text-[var(--text)] shrink-0"
-        >
-          {theme === 'dark' ? '☀' : '☾'}
-        </button>
+        {/* Sheets are light-only (dsheet limitation) — no toggle there. */}
+        {!isSheet && (
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+            className="text-[15px] text-[var(--text-muted)] hover:text-[var(--text)] shrink-0"
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+        )}
         {versions.length > 0 && (
           <div className="relative">
             <button
