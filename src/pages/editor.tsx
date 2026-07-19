@@ -993,10 +993,13 @@ export const EditorPage = () => {
                     className="absolute inset-0 bg-black/40"
                     onClick={() => setShowShare(false)}
                   />
-                  {/* Thick bottom padding: mobile Freedom Browser floats its
-                      address pill OVER the page bottom, so the drawer's last
-                      rows must clear it (safe-area inset alone is not it). */}
-                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] p-4 pb-[calc(env(safe-area-inset-bottom)+11rem)] max-h-[85vh] overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
+                  {/* Thick bottom padding (IMPORTANT modifier: the editor
+                      packages ship compiled .p-4 in their own sheets — dsheet's
+                      even loads lazily, after ours — and a later plain .p-4
+                      flattens padding-bottom back to 1rem): mobile Freedom
+                      Browser floats its address pill OVER the page bottom, so
+                      the drawer's last rows must clear it. */}
+                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] p-4 pb-[calc(env(safe-area-inset-bottom)+5.5rem)]! max-h-[85vh] overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
                     <div className="mx-auto h-1 w-10 rounded-full bg-[var(--border)]" />
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-[15px]">Share</span>
