@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useHeadlessEditor } from '@fileverse-dev/ddoc'
 import {
   DOC_SCHEMA,
   DocSnapshot,
   createDoc,
+  saveContent,
   updateDoc,
 } from '../lib/docs-store'
 import {
@@ -25,9 +27,34 @@ import { encryptJson } from '../lib/crypto'
  * just opens the editor. The doc is published once so it has a durable Swarm
  * feed the drive can store and reopen from any device.
  */
+/**
+ * A presentation IS a document: you write it here, and "▶ Present" renders
+ * it as slides (md2slides). The starter deck teaches the one rule that
+ * matters — a horizontal rule starts a new slide.
+ */
+const SLIDES_TEMPLATE = `# Untitled presentation
+
+Your story starts here.
+
+---
+
+## How slides work
+
+- This is a normal document — write freely
+- A horizontal rule starts a new slide
+- Hit **▶ Present** (top right) to show the deck
+
+---
+
+## Thank you
+
+Made with ddrive Slides
+`
+
 export const CreatePage = () => {
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const { getYjsContentFromMarkdown } = useHeadlessEditor()
   const kindParam = params.get('kind')
   const kind =
     kindParam === 'sheet' ? 'sheet' : kindParam === 'slides' ? 'slides' : 'doc'
@@ -49,6 +76,28 @@ export const CreatePage = () => {
       const doc = createDoc(name, kind)
       const key = doc.keyB64!
 
+      // New presentations start from the template deck (best-effort — an
+      // empty deck is still fine). Saved BEFORE the Swarm gate so the editor
+      // has it even when publishing fails.
+      let content: string = ''
+      if (kind === 'slides') {
+        try {
+          const templateFile = new File([SLIDES_TEMPLATE], 'template.md')
+          const state = await getYjsContentFromMarkdown(
+            templateFile,
+            async () => {
+              throw new Error('The template has no images')
+            }
+          )
+          if (typeof state === 'string' && state) {
+            content = state
+            saveContent(doc.id, state)
+          }
+        } catch (err) {
+          console.warn('Slides template seeding failed:', err)
+        }
+      }
+
       try {
         setStatus('Connecting to Swarm…')
         const connected = await connectSwarm()
@@ -62,7 +111,7 @@ export const CreatePage = () => {
           name,
           kind,
           ...(doc.sheetId ? { sheetId: doc.sheetId } : {}),
-          content: '',
+          content,
           publishedAt: Date.now(),
           writers: [],
         }
