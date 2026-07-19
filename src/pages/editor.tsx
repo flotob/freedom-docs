@@ -704,7 +704,7 @@ export const EditorPage = () => {
         {doc?.kind === 'slides' && (
           <button
             onClick={() => setIsPresentationMode(true)}
-            className="text-[13px] font-medium text-white bg-[var(--accent)]! rounded-lg px-3! py-1.5! shrink-0 hover:opacity-90"
+            className="text-[13px] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)] rounded-lg px-3 py-1.5 shrink-0"
             title="Present this document as slides"
           >
             ▶ Present
