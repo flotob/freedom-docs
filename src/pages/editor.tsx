@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DdocEditor } from '@fileverse-dev/ddoc'
 import type { JSONContent } from '@tiptap/core'
@@ -197,6 +198,17 @@ export const EditorPage = () => {
   const contentRef = useRef<JSONContent | string | null>(
     docId ? loadContent(docId) : null
   )
+  // Unsaved-changes tracking for the Save button: baseline = content at
+  // open (or after the last save/sync); onChange compares against it, so
+  // an editor-mount onChange with identical content doesn't flag dirty.
+  const [dirty, setDirty] = useState(false)
+  const savedBaselineRef = useRef<JSONContent | string | null>(
+    contentRef.current
+  )
+  // After a sync-merge remount the editor re-emits the (merged) state via
+  // onChange — adopt that emission as the new baseline instead of flagging
+  // it as an unsaved edit the user never made.
+  const adoptNextChangeAsBaselineRef = useRef(false)
   // Stable indirection to the change handler (defined below) so the sheet's
   // onChange prop can be identity-stable.
   const onChangeRef = useRef<(c: string | JSONContent) => void>(() => {})
@@ -274,6 +286,7 @@ export const EditorPage = () => {
         key: (prev?.key ?? 0) + 1,
         content: mergeInitialContent(mergedStates, contentRef.current),
       }))
+      adoptNextChangeAsBaselineRef.current = true
       lastAppliedHashRef.current = await fingerprintStates(remote.states)
       lastLiveHashRef.current = await fingerprintStates(liveStates)
       setRemoteChanged(false)
@@ -376,6 +389,20 @@ export const EditorPage = () => {
   const onChange = useCallback(
     (updatedDocContent: string | JSONContent) => {
       contentRef.current = updatedDocContent
+      if (adoptNextChangeAsBaselineRef.current) {
+        adoptNextChangeAsBaselineRef.current = false
+        savedBaselineRef.current = updatedDocContent
+        setDirty(false)
+      } else {
+        // String states compare cheaply; object (JSONContent) docs just
+        // flag dirty on any change — reference equality never matches.
+        setDirty(
+          typeof updatedDocContent === 'string' &&
+            typeof savedBaselineRef.current === 'string'
+            ? updatedDocContent !== savedBaselineRef.current
+            : true
+        )
+      }
       lastLocalEditRef.current = Date.now()
       // Live-propagate to peers (only base64 Yjs states are CRDT-mergeable;
       // JSONContent docs fall back to the durable sync path).
@@ -403,7 +430,7 @@ export const EditorPage = () => {
     const connected = await connectSwarm()
     if (!connected && !hasWritableStorage()) {
       throw new Error(
-        'No Swarm provider available. Open ddrive in Freedom Browser to publish.'
+        'No Swarm provider available. Open ddrive in Freedom Browser to save.'
       )
     }
 
@@ -458,6 +485,8 @@ export const EditorPage = () => {
     })
     setVersions(updated?.versions || [])
     refreshDoc()
+    savedBaselineRef.current = contentRef.current
+    setDirty(false)
 
     // A collaborator's first publish creates their writer feed — announce it
     // over presence so the owner auto-adds them (no card paste needed).
@@ -476,7 +505,7 @@ export const EditorPage = () => {
       setTimeout(() => setPublishState('idle'), 2500)
     } catch (err: any) {
       console.error(err)
-      setPublishError(err?.message || 'Publish failed')
+      setPublishError(err?.message || 'Save failed')
       setPublishState('error')
     }
   }
@@ -501,7 +530,7 @@ export const EditorPage = () => {
       setTimeout(() => setPublishState('idle'), 2500)
       await syncFromSwarm()
     } catch (err: any) {
-      setPublishError(err?.message || 'Failed to publish collaborator list')
+      setPublishError(err?.message || 'Failed to save collaborator list')
       setPublishState('error')
     }
   }
@@ -512,7 +541,7 @@ export const EditorPage = () => {
     try {
       await publish(next)
     } catch (err: any) {
-      setPublishError(err?.message || 'Failed to publish collaborator list')
+      setPublishError(err?.message || 'Failed to save collaborator list')
     }
   }
 
@@ -627,6 +656,121 @@ export const EditorPage = () => {
     )
   }
 
+  // Share controls, rendered in two shells: a dropdown on desktop and a
+  // bottom drawer on phones (the dropdown is unusable at 380px).
+  const sharePanel = (
+    <>
+      {!viewLink && (
+        <p className="text-[var(--text-muted)]">
+          Save once to get shareable links.
+        </p>
+      )}
+      {viewLink && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-medium">Read-only link</span>
+          <button
+            onClick={() => copyToClipboard('view', viewLink)}
+            className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]!"
+          >
+            {copied === 'view' ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      )}
+      {editLink && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-medium">Edit link</span>
+          <button
+            onClick={() => copyToClipboard('edit', editLink)}
+            className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]!"
+          >
+            {copied === 'edit' ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      )}
+
+      {isCollaborator && (
+        <div className="border-t pt-3">
+          <div className="font-medium mb-1">Your collaborator card</div>
+          {myCard ? (
+            <div className="flex items-center gap-2">
+              <code className="text-[11px] break-all flex-1 bg-[var(--surface-2)] rounded p-2">
+                {myCard}
+              </code>
+              <button
+                onClick={() => copyToClipboard('card', myCard)}
+                className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]! shrink-0"
+              >
+                {copied === 'card' ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-[var(--text-muted)]">
+              Save once to create your writer stream, then send this card
+              to the owner so they can add you.
+            </p>
+          )}
+        </div>
+      )}
+
+      {!isCollaborator && (
+        <div className="border-t pt-3 flex flex-col gap-2">
+          <div className="font-medium">
+            Collaborators ({writers.length})
+          </div>
+          {writers.map((writer) => (
+            <div
+              key={writer.feedRef}
+              className="flex items-center justify-between gap-2"
+            >
+              <span className="truncate" title={writer.feedRef}>
+                {writer.label}{' '}
+                <span className="text-[var(--text-muted)]">
+                  {writer.feedRef.slice(0, 8)}…
+                </span>
+              </span>
+              <button
+                onClick={() => onRemoveWriter(writer.feedRef)}
+                className="text-[var(--text-muted)] hover:text-red-500"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <input
+              value={newWriterLabel}
+              onChange={(e) => setNewWriterLabel(e.target.value)}
+              placeholder="Name"
+              className="w-[100px] border border-[var(--border)] rounded px-2 py-1"
+            />
+            <input
+              value={newWriterRef}
+              onChange={(e) => setNewWriterRef(e.target.value)}
+              placeholder="Paste collaborator card (64-hex)"
+              className="flex-1 border border-[var(--border)] rounded px-2 py-1"
+            />
+            <button
+              onClick={onAddWriter}
+              disabled={!SWARM_REF_REGEX.test(newWriterRef.trim())}
+              className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]! disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
+          <p className="text-[var(--text-muted)] text-[12px]">
+            Send the edit link to a collaborator; they save once and send
+            you back their collaborator card.
+          </p>
+        </div>
+      )}
+    </>
+  )
+
+  // A doc that has never been saved to Swarm can always be saved (that
+  // first save is what mints the shareable links), otherwise only when
+  // there are unsaved changes.
+  const canSave = dirty || !doc?.lastPublishedRef
+
   const renderNavbar = () => (
     <div
       // The editor renders its navbar and toolbar as sibling fixed bars, both
@@ -638,11 +782,25 @@ export const EditorPage = () => {
       }}
       className="w-full flex items-center justify-between gap-4 px-3 py-1.5">
       <div className="flex flex-1 items-center gap-3 min-w-0">
+        {/* Mobile only: chevron back to the drive. Desktop has no back
+            control at all — the drive tab is still open next door. */}
         <button
           onClick={goBack}
-          className="text-[var(--text-muted)] hover:text-[var(--text)] text-[14px] shrink-0"
+          title="Back to ddrive"
+          className="desktop-hidden shrink-0 -ml-1 p-1 text-[var(--text-muted)] hover:text-[var(--text)]"
         >
-          ← ddrive
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
         </button>
         <input
           value={docName}
@@ -767,131 +925,65 @@ export const EditorPage = () => {
             >
               Share
             </button>
+            {/* Desktop: anchored dropdown. */}
             {showShare && (
-              <div className="absolute right-0 top-full mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg p-4 w-[380px] z-50 flex flex-col gap-3 text-[13px]">
-                {!viewLink && (
-                  <p className="text-[var(--text-muted)]">
-                    Publish once to get shareable links.
-                  </p>
-                )}
-                {viewLink && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">Read-only link</span>
-                    <button
-                      onClick={() => copyToClipboard('view', viewLink)}
-                      className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]!"
-                    >
-                      {copied === 'view' ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                )}
-                {editLink && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">Edit link</span>
-                    <button
-                      onClick={() => copyToClipboard('edit', editLink)}
-                      className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]!"
-                    >
-                      {copied === 'edit' ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                )}
-
-                {isCollaborator && (
-                  <div className="border-t pt-3">
-                    <div className="font-medium mb-1">Your collaborator card</div>
-                    {myCard ? (
-                      <div className="flex items-center gap-2">
-                        <code className="text-[11px] break-all flex-1 bg-[var(--surface-2)] rounded p-2">
-                          {myCard}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard('card', myCard)}
-                          className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]! shrink-0"
-                        >
-                          {copied === 'card' ? 'Copied!' : 'Copy'}
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-[var(--text-muted)]">
-                        Publish once to create your writer stream, then send
-                        this card to the owner so they can add you.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {!isCollaborator && (
-                  <div className="border-t pt-3 flex flex-col gap-2">
-                    <div className="font-medium">
-                      Collaborators ({writers.length})
-                    </div>
-                    {writers.map((writer) => (
-                      <div
-                        key={writer.feedRef}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="truncate" title={writer.feedRef}>
-                          {writer.label}{' '}
-                          <span className="text-[var(--text-muted)]">
-                            {writer.feedRef.slice(0, 8)}…
-                          </span>
-                        </span>
-                        <button
-                          onClick={() => onRemoveWriter(writer.feedRef)}
-                          className="text-[var(--text-muted)] hover:text-red-500"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <input
-                        value={newWriterLabel}
-                        onChange={(e) => setNewWriterLabel(e.target.value)}
-                        placeholder="Name"
-                        className="w-[100px] border border-[var(--border)] rounded px-2 py-1"
-                      />
-                      <input
-                        value={newWriterRef}
-                        onChange={(e) => setNewWriterRef(e.target.value)}
-                        placeholder="Paste collaborator card (64-hex)"
-                        className="flex-1 border border-[var(--border)] rounded px-2 py-1"
-                      />
-                      <button
-                        onClick={onAddWriter}
-                        disabled={!SWARM_REF_REGEX.test(newWriterRef.trim())}
-                        className="border border-[var(--border)] rounded px-2 py-1 hover:bg-[var(--hover)]! disabled:opacity-40"
-                      >
-                        Add
-                      </button>
-                    </div>
-                    <p className="text-[var(--text-muted)] text-[12px]">
-                      Send the edit link to a collaborator; they publish once
-                      and send you back their collaborator card.
-                    </p>
-                  </div>
-                )}
+              <div className="mobile-hidden absolute right-0 top-full mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg p-4 w-[380px] z-50 text-[13px]">
+                <div className="flex flex-col gap-3">{sharePanel}</div>
               </div>
             )}
+            {/* Mobile: bottom drawer through a portal (the class must sit on
+                the portal ROOT — it renders into <body>, outside any
+                responsive wrapper in this tree). */}
+            {showShare &&
+              createPortal(
+                <div className="desktop-hidden fixed inset-0 z-[70]">
+                  <div
+                    className="absolute inset-0 bg-black/40"
+                    onClick={() => setShowShare(false)}
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-h-[75vh] overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
+                    <div className="mx-auto h-1 w-10 rounded-full bg-[var(--border)]" />
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-[15px]">Share</span>
+                      <button
+                        onClick={() => setShowShare(false)}
+                        className="text-[var(--text-muted)] hover:text-[var(--text)] px-2 py-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {sharePanel}
+                  </div>
+                </div>,
+                document.body
+              )}
           </div>
         )}
+        {/* "Save" (users don't know what "publish" means). The button IS the
+            unsaved-changes indicator: accent Save when dirty (or never yet
+            saved), muted disabled Saved when clean. */}
         <button
           onClick={onPublish}
-          disabled={publishState === 'publishing'}
-          className="bg-[var(--accent)]! text-white rounded-lg px-4 py-1.5 text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
+          disabled={
+            publishState === 'publishing' ||
+            (!canSave && publishState !== 'published')
+          }
+          title={
+            canSave ? 'You have unsaved changes' : 'All changes saved to Swarm'
+          }
+          className={
+            canSave || publishState !== 'idle'
+              ? 'bg-[var(--accent)]! text-white rounded-lg px-4 py-1.5 text-[14px] font-medium hover:opacity-90 disabled:opacity-70'
+              : 'border border-[var(--border)] text-[var(--text-muted)] rounded-lg px-4 py-1.5 text-[14px] font-medium'
+          }
         >
-          {publishState === 'publishing' ? (
-            'Publishing…'
-          ) : publishState === 'published' ? (
-            'Published ✓'
-          ) : (
-            <>
-              {/* Long label desktop, short on phones (space is precious) */}
-              <span className="mobile-hidden">Publish to Swarm</span>
-              <span className="desktop-hidden">Publish</span>
-            </>
-          )}
+          {publishState === 'publishing'
+            ? 'Saving…'
+            : publishState === 'published'
+              ? 'Saved ✓'
+              : canSave
+                ? 'Save'
+                : 'Saved'}
         </button>
       </div>
     </div>
