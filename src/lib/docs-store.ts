@@ -118,6 +118,16 @@ export const createDoc = (name = 'Untitled', kind: DocKind = 'doc'): DocRecord =
   return doc
 }
 
+/**
+ * Insert a fully specified record under a KNOWN id (recovery/adoption
+ * paths — the id must match the drive pointer's docId so the on-chain
+ * entry keeps resolving). Replaces any existing record with that id.
+ */
+export const adoptDoc = (record: DocRecord): DocRecord => {
+  saveIndex([record, ...listDocs().filter((doc) => doc.id !== record.id)])
+  return record
+}
+
 export const updateDoc = (
   id: string,
   patch: Partial<Omit<DocRecord, 'id'>>

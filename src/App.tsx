@@ -4,6 +4,7 @@ import { EditorPage } from './pages/editor'
 import { ViewerPage } from './pages/viewer'
 import { JoinPage } from './pages/join'
 import { ImportFilePage } from './pages/import-file'
+import { RecoverDocPage } from './pages/recover-doc'
 import '@fileverse-dev/ddoc/styles'
 // NOTE: dsheet's CSS is NOT imported globally — it ships a Tailwind reset
 // that clobbers our app + ddoc styling. It loads lazily with the sheet
@@ -14,6 +15,7 @@ const App = () => {
     <Routes>
       <Route path="/" element={<DocList />} />
       <Route path="/import-file" element={<ImportFilePage />} />
+      <Route path="/recover" element={<RecoverDocPage />} />
       <Route path="/edit/:docId" element={<EditorPage />} />
       <Route path="/d/:reference" element={<ViewerPage />} />
       <Route path="/d/:reference/:docKey" element={<ViewerPage />} />
